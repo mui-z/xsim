@@ -4,10 +4,10 @@
 import PackageDescription
 
 let package = Package(
-    name: "SwiftCLIToolTemplate",
+    name: "XSim",
     platforms: [.macOS(.v10_15)],
     products: [
-        .executable(name: "test", targets: ["SwiftCLIToolTemplate"]),
+        .executable(name: "xsim", targets: ["XSim"]),
     ],
     dependencies: [
         .package(url: "https://github.com/onevcat/Rainbow", from: "4.0.1"),
@@ -15,12 +15,12 @@ let package = Package(
         .package(url: "https://github.com/jakeheis/SwiftCLI", from: "6.0.1"),
     ],
     targets: [
-        .executableTarget(name: "SwiftCLIToolTemplate", dependencies: ["SwiftCLIToolTemplateCLI"]),
-        .target(name: "SwiftCLIToolTemplateCLI", dependencies: ["SwiftCLIToolTemplateKit", "PathKit", "Rainbow", "SwiftCLI"]),
-        .target(name: "SwiftCLIToolTemplateKit", dependencies: ["PathKit", "Rainbow"]),
+        .executableTarget(name: "XSim", dependencies: ["XSimCLI"]),
+        .target(name: "XSimCLI", dependencies: ["PathKit", "Rainbow", "SwiftCLI"]),
+        // .target(name: "XSimKit", dependencies: ["PathKit", "Rainbow"]),
         .testTarget(
-            name: "SwiftCLIToolTemplateTests",
-            dependencies: ["SwiftCLIToolTemplate"]
+            name: "XSimTests",
+            dependencies: ["XSim"]
         ),
     ]
 )

@@ -1,3 +1,4 @@
-# SwiftCLIToolTemplate
+# XSim
 
-the simple swift cli tool template.
+the simple xcode launching tool.
+

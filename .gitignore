@@ -130,3 +130,6 @@ fastlane/test_output
 iOSInjectionProject/
 
 
+test.json
+
+.vscode

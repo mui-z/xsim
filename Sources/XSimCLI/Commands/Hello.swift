@@ -3,11 +3,10 @@
 //
 
 import Foundation
-import SwiftCLI
 import PathKit
+import SwiftCLI
 
 class Hello: Command {
-
     let name: String = "hello"
     let shortDescription: String = "say hello."
 
