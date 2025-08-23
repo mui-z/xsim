@@ -1,3 +1,3 @@
-# SwiftCLIToolTemplate
+# XSim
 
-the simple swift cli tool template.
+simple xcrun simctl wrapper.
