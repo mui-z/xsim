@@ -1,4 +1,5 @@
 # XSim
+# 🚧🚧Not working properly🚧🚧
 
 simple xcrun simctl wrapper.
 
