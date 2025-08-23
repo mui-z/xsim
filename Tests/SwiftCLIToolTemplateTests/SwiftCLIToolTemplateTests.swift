@@ -1,5 +1,5 @@
-import XCTest
 @testable import SwiftCLIToolTemplate
+import XCTest
 
 final class SwiftCLIToolTemplateTests: XCTestCase {
     func testExample() throws {
