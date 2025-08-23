@@ -22,7 +22,7 @@ class ListCommand: Command {
     @Flag("-a", "--available", description: "利用可能なシミュレータのみ表示")
     var showAvailableOnly: Bool
 
-    @Flag("--resolve-names", description: "ランタイム/デバイスタイプ名をJSONで正確に解決 (追加のsimctl呼び出し)" )
+    @Flag("--resolve-names", description: "ランタイム/デバイスタイプ名をJSONで正確に解決 (追加のsimctl呼び出し)")
     var resolveNames: Bool
 
     private var simulatorService: SimulatorService?
