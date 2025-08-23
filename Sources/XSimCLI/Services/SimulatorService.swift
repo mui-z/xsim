@@ -508,6 +508,27 @@ class SimulatorService {
         try verifyDeviceDeleted(device.udid)
     }
 
+    /// Deletes multiple simulator devices in a single simctl invocation
+    /// - Parameter udids: Array of device UDIDs to delete
+    /// - Throws: SimulatorError if the operation fails
+    func deleteSimulators(udids: [String]) throws {
+        let uniqueUdids = Array(Set(udids)).filter { !$0.isEmpty }
+        guard !uniqueUdids.isEmpty else { return }
+
+        // Best-effort: stop running devices first
+        let devices = try listDevices()
+        let running = devices.filter { uniqueUdids.contains($0.udid) && $0.state.isRunning }
+        for d in running {
+            try? stopSimulator(identifier: d.udid)
+        }
+
+        // Perform a single bulk delete
+        _ = try executeSimctlCommand(arguments: ["delete"] + uniqueUdids)
+
+        // Verify deletion
+        try verifyDevicesDeleted(uniqueUdids)
+    }
+
     /// Validates device type and runtime identifiers
     /// - Parameters:
     ///   - deviceType: Device type identifier to validate
@@ -547,6 +568,27 @@ class SimulatorService {
                 throw SimulatorError.simctlCommandFailed("Device deletion verification failed")
             }
 
+            Thread.sleep(forTimeInterval: delayBetweenAttempts)
+        }
+    }
+
+    /// Verifies that multiple devices have been deleted successfully
+    /// - Parameter deviceUUIDs: The UUIDs of the devices to verify
+    /// - Throws: SimulatorError if verification fails
+    private func verifyDevicesDeleted(_ deviceUUIDs: [String]) throws {
+        let target = Set(deviceUUIDs)
+        let maxAttempts = 5
+        let delayBetweenAttempts: TimeInterval = 0.5
+
+        for attempt in 1 ... maxAttempts {
+            let devices = try listDevices()
+            let remaining = Set(devices.map(\.udid)).intersection(target)
+            if remaining.isEmpty {
+                return
+            }
+            if attempt == maxAttempts {
+                throw SimulatorError.simctlCommandFailed("Bulk deletion verification failed for: \(remaining.joined(separator: ", "))")
+            }
             Thread.sleep(forTimeInterval: delayBetweenAttempts)
         }
     }

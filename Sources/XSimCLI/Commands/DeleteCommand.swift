@@ -10,15 +10,22 @@ class DeleteCommand: Command {
     If the simulator is running, it will be stopped before deletion.
     This action cannot be undone.
 
+    You can also delete all simulators for a given OS/runtime version using --runtime.
+
     Examples:
       xsim delete "iPhone 15"                  # by name
       xsim delete 12345678-1234-1234-1234-123456789012  # by UUID
+      xsim delete --runtime "iOS 17.0"         # all iOS 17.0 simulators
+      xsim delete --runtime com.apple.CoreSimulator.SimRuntime.iOS-17-0
     """
 
-    @Param var deviceIdentifier: String
+    @Param var deviceIdentifier: String?
 
     @Flag("-f", "--force", description: "Delete without confirmation")
     var force: Bool
+
+    @Key("--runtime", description: "Delete all simulators for the specified runtime (e.g. 'iOS 17.0' or 'com.apple.CoreSimulator.SimRuntime.iOS-17-0')")
+    var runtimeFilter: String?
 
     private var simulatorService: SimulatorService?
 
@@ -26,34 +33,135 @@ class DeleteCommand: Command {
 
     func execute() throws {
         do {
-            // Get device info before deleting
             let simulatorService = try getService()
-            let devices = try simulatorService.listDevices()
-            guard let device = findDevice(devices: devices, identifier: deviceIdentifier) else {
-                throw SimulatorError.deviceNotFound(deviceIdentifier)
+
+            if let runtimeFilter, runtimeFilter.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false {
+                // Bulk delete by runtime
+                try deleteAllForRuntime(simulatorService: simulatorService, runtimeFilter: runtimeFilter)
+            } else if let identifier = deviceIdentifier {
+                // Single device delete
+                let devices = try simulatorService.listDevices()
+                guard let device = findDevice(devices: devices, identifier: identifier) else {
+                    throw SimulatorError.deviceNotFound(identifier)
+                }
+
+                // Show warning and device info
+                displayDeleteWarning(device: device)
+
+                // Confirm the delete operation unless forced
+                if !force, !confirmDelete(device: device) {
+                    stdout <<< "Delete operation cancelled".yellow
+                    return
+                }
+
+                stdout <<< "Deleting simulator...".dim
+
+                try simulatorService.deleteSimulator(identifier: identifier)
+                displayDeleteSuccess(device: device)
+            } else {
+                // No identifier or runtime specified
+                stdout <<< "Error: Provide a device name/UUID or use --runtime to delete by OS version".red
+                stdout <<< ""
+                stdout <<< "Usage:".bold
+                stdout <<< "  xsim delete <device>                # by name or UUID"
+                stdout <<< "  xsim delete --runtime 'iOS 17.0'    # delete all for a runtime"
+                stdout <<< "  xsim delete --runtime com.apple.CoreSimulator.SimRuntime.iOS-17-0".dim
+                throw CLI.Error(message: "")
             }
-
-            // Show warning and device info
-            displayDeleteWarning(device: device)
-
-            // Confirm the delete operation unless forced
-            if !force, !confirmDelete(device: device) {
-                stdout <<< "Delete operation cancelled".yellow
-                return
-            }
-
-            stdout <<< "Deleting simulator...".dim
-
-            // Delete the device
-            try simulatorService.deleteSimulator(identifier: deviceIdentifier)
-
-            displayDeleteSuccess(device: device)
 
         } catch let error as SimulatorError {
             try handleSimulatorError(error)
         } catch {
             throw CLI.Error(message: "An unexpected error occurred: \(error.localizedDescription)")
         }
+    }
+
+    /// Deletes all simulators that match the given runtime filter
+    private func deleteAllForRuntime(simulatorService: SimulatorService, runtimeFilter: String) throws {
+        let devices = try simulatorService.listDevices()
+
+        let matchingDevices = devices.filter { device in
+            runtimeMatches(filter: runtimeFilter, runtimeIdentifier: device.runtimeIdentifier)
+        }
+
+        if matchingDevices.isEmpty {
+            stdout <<< "No simulators found for runtime filter: \(runtimeFilter)".yellow
+            return
+        }
+
+        // Show a summary and confirm
+        displayBulkDeleteWarning(devices: matchingDevices, runtimeFilter: runtimeFilter)
+        if !force, !confirmBulkDelete(count: matchingDevices.count) {
+            stdout <<< "Delete operation cancelled".yellow
+            return
+        }
+
+        stdout <<< "Deleting \(matchingDevices.count) simulator(s) for runtime filter '\(runtimeFilter)'...".dim
+
+        // Use bulk deletion for speed
+        let udids = matchingDevices.map(\.udid)
+        do {
+            try simulatorService.deleteSimulators(udids: udids)
+            stdout <<< "✓ Bulk delete completed".green
+        } catch {
+            // If bulk delete fails, fall back to per-device deletion with messages
+            stdout <<< "Bulk delete failed, falling back to per-device: \(error.localizedDescription)".yellow
+            for device in matchingDevices {
+                do {
+                    try simulatorService.deleteSimulator(identifier: device.udid)
+                    stdout <<< "  ✓ Deleted: \(device.name) (\(extractDeviceTypeName(from: device.deviceTypeIdentifier)))".green
+                } catch {
+                    stdout <<< "  ✗ Failed: \(device.name) - \(error.localizedDescription)".red
+                }
+            }
+        }
+    }
+
+    /// Checks if a runtime identifier matches a flexible filter
+    private func runtimeMatches(filter: String, runtimeIdentifier: String) -> Bool {
+        let filterLower = filter.lowercased()
+
+        // Exact match (full runtime identifier)
+        if runtimeIdentifier.lowercased() == filterLower { return true }
+
+        // Match against display form like "iOS 17.0"
+        let display = extractRuntimeDisplayName(from: runtimeIdentifier).lowercased()
+        if display == filterLower { return true }
+
+        // Allow filter like "iOS 17" (prefix match) or just version "17"/"17.0"
+        if display.hasPrefix(filterLower) { return true }
+
+        // Version-only match: e.g., filter "17" or "17.0"
+        let versionOnly = display.replacingOccurrences(of: "iOS ", with: "")
+            .replacingOccurrences(of: "watchOS ", with: "")
+            .replacingOccurrences(of: "tvOS ", with: "")
+        if versionOnly == filterLower || versionOnly.hasPrefix(filterLower) { return true }
+
+        return false
+    }
+
+    /// Displays a warning summary for bulk deletion
+    private func displayBulkDeleteWarning(devices: [SimulatorDevice], runtimeFilter: String) {
+        if force { return }
+        stdout <<< "⚠️  Confirm bulk deletion".yellow.bold
+        stdout <<< ""
+        stdout <<< "The following \(devices.count) simulator(s) will be deleted for runtime filter '\(runtimeFilter)':".bold
+        for device in devices.sorted(by: { $0.name < $1.name }) {
+            let deviceTypeName = extractDeviceTypeName(from: device.deviceTypeIdentifier)
+            let runtimeName = extractRuntimeDisplayName(from: device.runtimeIdentifier)
+            stdout <<< "  • \(device.name) (\(deviceTypeName), \(runtimeName)) \(device.udid.dim)"
+        }
+        stdout <<< ""
+        stdout <<< "This action cannot be undone.".red.bold
+    }
+
+    /// Confirms bulk deletion
+    private func confirmBulkDelete(count: Int) -> Bool {
+        stdout <<< "Proceed to delete \(count) simulator(s)? (y/N): ".bold
+        guard let input = readLine()?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() else {
+            return false
+        }
+        return input == "y" || input == "yes"
     }
 
     /// Displays warning message before deletion
