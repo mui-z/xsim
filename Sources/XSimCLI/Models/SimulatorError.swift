@@ -41,98 +41,98 @@ public enum SimulatorError: Error, LocalizedError, Equatable {
     public var errorDescription: String? {
         switch self {
         case let .deviceNotFound(identifier):
-            "指定されたデバイス '\(identifier)' が見つかりません。利用可能なデバイスを確認するには 'xsim list' を実行してください。"
+            "Device '\(identifier)' was not found. Run 'xsim list' to see available devices."
 
         case let .deviceAlreadyRunning(identifier):
-            "デバイス '\(identifier)' は既に起動しています。"
+            "Device '\(identifier)' is already running."
 
         case let .deviceNotRunning(identifier):
-            "デバイス '\(identifier)' は起動していません。"
+            "Device '\(identifier)' is not running."
 
         case let .invalidDeviceType(deviceType):
-            "無効なデバイスタイプ '\(deviceType)' が指定されました。利用可能なデバイスタイプを確認するには 'xsim create --list-types' を実行してください。"
+            "Invalid device type '\(deviceType)'. Run 'xsim create --list-types' to list device types."
 
         case let .invalidRuntime(runtime):
-            "無効なランタイム '\(runtime)' が指定されました。利用可能なランタイムを確認するには 'xsim create --list-runtimes' を実行してください。"
+            "Invalid runtime '\(runtime)'. Run 'xsim create --list-runtimes' to list runtimes."
 
         case let .appBundleNotFound(path):
-            "指定されたパス '\(path)' にアプリバンドルが見つかりません。パスが正しいか確認してください。"
+            "No app bundle found at path '\(path)'. Please verify the path."
 
         case let .simctlCommandFailed(message):
-            "simctlコマンドの実行に失敗しました: \(message)"
+            "Failed to execute simctl: \(message)"
 
         case .insufficientPermissions:
-            "操作を実行するための権限が不足しています。管理者権限で実行してください。"
+            "Insufficient permissions to perform the operation. Try running with administrator privileges."
 
         case .noDevicesAvailable:
-            "利用可能なデバイスがありません。新しいシミュレータを作成するには 'xsim create' を使用してください。"
+            "No devices available. Use 'xsim create' to create a new simulator."
 
         case let .invalidDeviceIdentifier(identifier):
-            "無効なデバイス識別子 '\(identifier)' が指定されました。デバイス名またはUUIDを指定してください。"
+            "Invalid device identifier '\(identifier)'. Specify a device name or UUID."
 
         case .operationTimeout:
-            "操作がタイムアウトしました。しばらく待ってから再試行してください。"
+            "Operation timed out. Please wait a moment and try again."
 
         case .xcodeToolsNotInstalled:
-            "Xcode Command Line Toolsがインストールされていません。'xcode-select --install' を実行してインストールしてください。"
+            "Xcode Command Line Tools are not installed. Run 'xcode-select --install' to install them."
         }
     }
 
     public var failureReason: String? {
         switch self {
         case .deviceNotFound:
-            "指定されたデバイスが存在しません"
+            "The specified device does not exist"
         case .deviceAlreadyRunning:
-            "デバイスは既に起動状態です"
+            "The device is already running"
         case .deviceNotRunning:
-            "デバイスが停止状態です"
+            "The device is currently stopped"
         case .invalidDeviceType:
-            "サポートされていないデバイスタイプです"
+            "Unsupported device type"
         case .invalidRuntime:
-            "サポートされていないランタイムです"
+            "Unsupported runtime"
         case .appBundleNotFound:
-            "アプリバンドルが見つかりません"
+            "App bundle not found"
         case .simctlCommandFailed:
-            "simctlコマンドの実行エラー"
+            "simctl execution error"
         case .insufficientPermissions:
-            "権限不足"
+            "Insufficient permissions"
         case .noDevicesAvailable:
-            "利用可能なデバイスがありません"
+            "No devices available"
         case .invalidDeviceIdentifier:
-            "無効なデバイス識別子"
+            "Invalid device identifier"
         case .operationTimeout:
-            "操作タイムアウト"
+            "Operation timed out"
         case .xcodeToolsNotInstalled:
-            "Xcode Command Line Toolsが未インストール"
+            "Xcode Command Line Tools not installed"
         }
     }
 
     public var recoverySuggestion: String? {
         switch self {
         case .deviceNotFound:
-            "'xsim list' で利用可能なデバイスを確認してください"
+            "Run 'xsim list' to see available devices"
         case .deviceAlreadyRunning:
-            "デバイスは既に起動しているため、操作は不要です"
+            "The device is already running; no action is needed"
         case .deviceNotRunning:
-            "'xsim start <device>' でデバイスを起動してください"
+            "Start the device with 'xsim start <device>'"
         case .invalidDeviceType:
-            "'xsim create --list-types' で利用可能なデバイスタイプを確認してください"
+            "Run 'xsim create --list-types' to list available device types"
         case .invalidRuntime:
-            "'xsim create --list-runtimes' で利用可能なランタイムを確認してください"
+            "Run 'xsim create --list-runtimes' to list available runtimes"
         case .appBundleNotFound:
-            "アプリバンドルのパスが正しいか確認してください"
+            "Verify the app bundle path is correct"
         case .simctlCommandFailed:
-            "Xcodeが正しくインストールされているか確認してください"
+            "Verify that Xcode is properly installed"
         case .insufficientPermissions:
-            "管理者権限で実行するか、ファイルの権限を確認してください"
+            "Run with administrator privileges, or check file permissions"
         case .noDevicesAvailable:
-            "'xsim create' で新しいシミュレータを作成してください"
+            "Create a new simulator with 'xsim create'"
         case .invalidDeviceIdentifier:
-            "デバイス名またはUUIDを正しく指定してください"
+            "Specify a valid device name or UUID"
         case .operationTimeout:
-            "しばらく待ってから再試行してください"
+            "Wait a moment and try again"
         case .xcodeToolsNotInstalled:
-            "'xcode-select --install' を実行してXcode Command Line Toolsをインストールしてください"
+            "Run 'xcode-select --install' to install the Xcode Command Line Tools"
         }
     }
 }

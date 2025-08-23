@@ -4,20 +4,20 @@ import SwiftCLI
 /// Command to delete a simulator device
 class DeleteCommand: Command {
     let name = "delete"
-    let shortDescription = "シミュレータを削除"
+    let shortDescription = "Delete a simulator"
     let longDescription = """
-    指定されたシミュレータデバイスを削除します。
-    実行中のシミュレータは自動的に停止されてから削除されます。
-    この操作は元に戻すことができません。
+    Deletes the specified simulator device.
+    If the simulator is running, it will be stopped before deletion.
+    This action cannot be undone.
 
-    例:
-      xsim delete "iPhone 15"                  # 名前で指定
-      xsim delete 12345678-1234-1234-1234-123456789012  # UUIDで指定
+    Examples:
+      xsim delete "iPhone 15"                  # by name
+      xsim delete 12345678-1234-1234-1234-123456789012  # by UUID
     """
 
     @Param var deviceIdentifier: String
 
-    @Flag("-f", "--force", description: "確認なしで削除を実行")
+    @Flag("-f", "--force", description: "Delete without confirmation")
     var force: Bool
 
     private var simulatorService: SimulatorService?
@@ -38,11 +38,11 @@ class DeleteCommand: Command {
 
             // Confirm the delete operation unless forced
             if !force, !confirmDelete(device: device) {
-                stdout <<< "削除操作をキャンセルしました".yellow
+                stdout <<< "Delete operation cancelled".yellow
                 return
             }
 
-            stdout <<< "シミュレータを削除しています...".dim
+            stdout <<< "Deleting simulator...".dim
 
             // Delete the device
             try simulatorService.deleteSimulator(identifier: deviceIdentifier)
@@ -52,7 +52,7 @@ class DeleteCommand: Command {
         } catch let error as SimulatorError {
             try handleSimulatorError(error)
         } catch {
-            throw CLI.Error(message: "予期しないエラーが発生しました: \(error.localizedDescription)")
+            throw CLI.Error(message: "An unexpected error occurred: \(error.localizedDescription)")
         }
     }
 
@@ -62,37 +62,37 @@ class DeleteCommand: Command {
             return // Skip warning if forced
         }
 
-        stdout <<< "⚠️  削除操作の確認".yellow.bold
+        stdout <<< "⚠️  Confirm deletion".yellow.bold
         stdout <<< ""
 
         let deviceTypeName = extractDeviceTypeName(from: device.deviceTypeIdentifier)
         let runtimeName = extractRuntimeDisplayName(from: device.runtimeIdentifier)
 
-        stdout <<< "以下のシミュレータを削除します:".bold
-        stdout <<< "  名前: \(device.name)"
-        stdout <<< "  タイプ: \(deviceTypeName)"
-        stdout <<< "  ランタイム: \(runtimeName)"
+        stdout <<< "The following simulator will be deleted:".bold
+        stdout <<< "  Name: \(device.name)"
+        stdout <<< "  Type: \(deviceTypeName)"
+        stdout <<< "  Runtime: \(runtimeName)"
         stdout <<< "  UUID: \(device.udid)".dim
 
         if device.state.isRunning {
-            stdout <<< "  現在の状態: \(formatDeviceState(device.state))"
+            stdout <<< "  Current state: \(formatDeviceState(device.state))"
             stdout <<< ""
-            stdout <<< "注意: 実行中のシミュレータは自動的に停止されます".yellow
+            stdout <<< "Note: Running simulators will be stopped automatically".yellow
         }
 
         stdout <<< ""
-        stdout <<< "この操作により以下が削除されます:".red
-        stdout <<< "  • シミュレータデバイス"
-        stdout <<< "  • すべてのアプリとデータ"
-        stdout <<< "  • システム設定"
-        stdout <<< "  • ログファイル"
+        stdout <<< "This operation will delete:".red
+        stdout <<< "  • The simulator device"
+        stdout <<< "  • All apps and data"
+        stdout <<< "  • System settings"
+        stdout <<< "  • Log files"
         stdout <<< ""
-        stdout <<< "この操作は元に戻すことができません。".red.bold
+        stdout <<< "This action cannot be undone.".red.bold
     }
 
     /// Confirms the delete operation with user
     private func confirmDelete(device _: SimulatorDevice) -> Bool {
-        stdout <<< "本当に削除しますか？ (y/N): ".bold
+        stdout <<< "Are you sure you want to delete? (y/N): ".bold
 
         guard let input = readLine()?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() else {
             return false
@@ -105,9 +105,9 @@ class DeleteCommand: Command {
     private func handleSimulatorError(_ error: SimulatorError) throws {
         switch error {
         case let .deviceNotFound(identifier):
-            stdout <<< "✗ デバイス '\(identifier)' が見つかりません".red
+            stdout <<< "✗ Device '\(identifier)' not found".red
             stdout <<< ""
-            stdout <<< "利用可能なデバイスを確認するには:".dim
+            stdout <<< "To list available devices:".dim
             stdout <<< "  xsim list".cyan
             throw CLI.Error(message: "")
 
@@ -118,26 +118,26 @@ class DeleteCommand: Command {
 
     /// Displays success message after deletion
     private func displayDeleteSuccess(device: SimulatorDevice) {
-        stdout <<< "✓ シミュレータを削除しました".green
+        stdout <<< "✓ Deleted the simulator".green
         stdout <<< ""
 
         let deviceTypeName = extractDeviceTypeName(from: device.deviceTypeIdentifier)
         let runtimeName = extractRuntimeDisplayName(from: device.runtimeIdentifier)
 
-        stdout <<< "削除されたシミュレータ:".bold
-        stdout <<< "  名前: \(device.name)".dim
-        stdout <<< "  タイプ: \(deviceTypeName)".dim
-        stdout <<< "  ランタイム: \(runtimeName)".dim
+        stdout <<< "Deleted simulator:".bold
+        stdout <<< "  Name: \(device.name)".dim
+        stdout <<< "  Type: \(deviceTypeName)".dim
+        stdout <<< "  Runtime: \(runtimeName)".dim
         stdout <<< "  UUID: \(device.udid)".dim
 
         stdout <<< ""
-        stdout <<< "ヒント:".dim
-        stdout <<< "  • 残りのシミュレータを確認: xsim list".dim
-        stdout <<< "  • 新しいシミュレータを作成: xsim create <name> <type> <runtime>".dim
+        stdout <<< "Tips:".dim
+        stdout <<< "  • List remaining simulators: xsim list".dim
+        stdout <<< "  • Create a new simulator: xsim create <name> <type> <runtime>".dim
 
         // Show available device types and runtimes for convenience
-        stdout <<< "  • 利用可能なデバイスタイプ: xsim create --list-types".dim
-        stdout <<< "  • 利用可能なランタイム: xsim create --list-runtimes".dim
+        stdout <<< "  • Available device types: xsim create --list-types".dim
+        stdout <<< "  • Available runtimes: xsim create --list-runtimes".dim
     }
 
     /// Finds a device by identifier (name or UUID)
@@ -155,13 +155,13 @@ class DeleteCommand: Command {
     private func formatDeviceState(_ state: SimulatorState) -> String {
         switch state {
         case .booted:
-            "起動中".green
+            "Booted".green
         case .booting:
-            "起動処理中".yellow
+            "Booting".yellow
         case .shutdown:
-            "停止中".dim
+            "Shutdown".dim
         case .shuttingDown:
-            "停止処理中".yellow
+            "Shutting down".yellow
         }
     }
 

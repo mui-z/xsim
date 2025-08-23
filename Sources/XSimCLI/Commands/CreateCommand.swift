@@ -4,25 +4,25 @@ import SwiftCLI
 /// Command to create a new simulator device
 class CreateCommand: Command {
     let name = "create"
-    let shortDescription = "新しいシミュレータを作成"
+    let shortDescription = "Create a new simulator"
     let longDescription = """
-    新しいシミュレータデバイスを作成します。
-    デバイスタイプとランタイムを指定して、カスタム名でシミュレータを作成できます。
+    Creates a new simulator device.
+    Specify the device type and runtime, and optionally a custom name.
 
-    例:
+    Examples:
       xsim create "My iPhone" com.apple.CoreSimulator.SimDeviceType.iPhone-15 com.apple.CoreSimulator.SimRuntime.iOS-17-0
-      xsim create --list-types      # 利用可能なデバイスタイプを表示
-      xsim create --list-runtimes   # 利用可能なランタイムを表示
+      xsim create --list-types      # show available device types
+      xsim create --list-runtimes   # show available runtimes
     """
 
     @Param var deviceName: String?
     @Param var deviceType: String?
     @Param var runtime: String?
 
-    @Flag("--list-types", description: "利用可能なデバイスタイプを一覧表示")
+    @Flag("--list-types", description: "List available device types")
     var listDeviceTypes: Bool
 
-    @Flag("--list-runtimes", description: "利用可能なランタイムを一覧表示")
+    @Flag("--list-runtimes", description: "List available runtimes")
     var listRuntimes: Bool
 
     private var simulatorService: SimulatorService?
@@ -47,18 +47,18 @@ class CreateCommand: Command {
                   let deviceType,
                   let runtime
             else {
-                stdout <<< "エラー: シミュレータ作成には名前、デバイスタイプ、ランタイムが必要です".red
+                stdout <<< "Error: Name, device type, and runtime are required to create a simulator".red
                 stdout <<< ""
-                stdout <<< "使用方法:".bold
-                stdout <<< "  xsim create <名前> <デバイスタイプ> <ランタイム>"
+                stdout <<< "Usage:".bold
+                stdout <<< "  xsim create <name> <device-type> <runtime>"
                 stdout <<< ""
-                stdout <<< "利用可能なオプションを確認:".dim
-                stdout <<< "  xsim create --list-types      # デバイスタイプ一覧"
-                stdout <<< "  xsim create --list-runtimes   # ランタイム一覧"
+                stdout <<< "See available options:".dim
+                stdout <<< "  xsim create --list-types      # device types"
+                stdout <<< "  xsim create --list-runtimes   # runtimes"
                 throw CLI.Error(message: "")
             }
 
-            stdout <<< "新しいシミュレータを作成しています...".dim
+            stdout <<< "Creating a new simulator...".dim
 
             // Create the simulator
             let simulatorService = try getService()
@@ -69,7 +69,7 @@ class CreateCommand: Command {
         } catch let error as SimulatorError {
             try handleSimulatorError(error)
         } catch {
-            throw CLI.Error(message: "予期しないエラーが発生しました: \(error.localizedDescription)")
+            throw CLI.Error(message: "An unexpected error occurred: \(error.localizedDescription)")
         }
     }
 
@@ -79,11 +79,11 @@ class CreateCommand: Command {
         let deviceTypes = try simulatorService.getAvailableDeviceTypes()
 
         if deviceTypes.isEmpty {
-            stdout <<< "利用可能なデバイスタイプが見つかりません".yellow
+            stdout <<< "No device types found".yellow
             return
         }
 
-        stdout <<< "利用可能なデバイスタイプ:".bold.blue
+        stdout <<< "Available device types:".bold.blue
         stdout <<< ""
 
         // Group device types by category
@@ -110,11 +110,11 @@ class CreateCommand: Command {
         }
 
         if !otherTypes.isEmpty {
-            displayDeviceTypeCategory("その他", types: otherTypes)
+            displayDeviceTypeCategory("Other", types: otherTypes)
         }
 
         stdout <<< ""
-        stdout <<< "使用例:".dim
+        stdout <<< "Example:".dim
         stdout <<< "  xsim create \"My iPhone\" \(iPhoneTypes.first?.identifier ?? "DEVICE_TYPE") RUNTIME_ID"
     }
 
@@ -124,11 +124,11 @@ class CreateCommand: Command {
         let runtimes = try simulatorService.getAvailableRuntimes()
 
         if runtimes.isEmpty {
-            stdout <<< "利用可能なランタイムが見つかりません".yellow
+            stdout <<< "No runtimes found".yellow
             return
         }
 
-        stdout <<< "利用可能なランタイム:".bold.blue
+        stdout <<< "Available runtimes:".bold.blue
         stdout <<< ""
 
         // Group runtimes by platform
@@ -150,11 +150,11 @@ class CreateCommand: Command {
         }
 
         if !otherRuntimes.isEmpty {
-            displayRuntimeCategory("その他", runtimes: otherRuntimes)
+            displayRuntimeCategory("Other", runtimes: otherRuntimes)
         }
 
         stdout <<< ""
-        stdout <<< "使用例:".dim
+        stdout <<< "Example:".dim
         stdout <<< "  xsim create \"My iPhone\" DEVICE_TYPE \(iOSRuntimes.first?.identifier ?? "RUNTIME_ID")"
     }
 
@@ -184,7 +184,7 @@ class CreateCommand: Command {
 
         for runtime in sortedRuntimes {
             let availability = runtime.isAvailable ? "✓".green : "✗".red
-            let status = runtime.isAvailable ? "" : " (利用不可)".red
+            let status = runtime.isAvailable ? "" : " (Unavailable)".red
             stdout <<< "  \(availability) \(runtime.displayName.padding(toLength: 20, withPad: " ", startingAt: 0))\(status) \(runtime.identifier.dim)"
         }
 
@@ -195,16 +195,16 @@ class CreateCommand: Command {
     private func handleSimulatorError(_ error: SimulatorError) throws {
         switch error {
         case let .invalidDeviceType(deviceType):
-            stdout <<< "✗ 無効なデバイスタイプ: \(deviceType)".red
+            stdout <<< "✗ Invalid device type: \(deviceType)".red
             stdout <<< ""
-            stdout <<< "利用可能なデバイスタイプを確認するには:".dim
+            stdout <<< "To list available device types:".dim
             stdout <<< "  xsim create --list-types".cyan
             throw CLI.Error(message: "")
 
         case let .invalidRuntime(runtime):
-            stdout <<< "✗ 無効なランタイム: \(runtime)".red
+            stdout <<< "✗ Invalid runtime: \(runtime)".red
             stdout <<< ""
-            stdout <<< "利用可能なランタイムを確認するには:".dim
+            stdout <<< "To list available runtimes:".dim
             stdout <<< "  xsim create --list-runtimes".cyan
             throw CLI.Error(message: "")
 
@@ -215,22 +215,22 @@ class CreateCommand: Command {
 
     /// Displays success message after creation
     private func displayCreateSuccess(name: String, deviceType: String, runtime: String, uuid: String) {
-        stdout <<< "✓ 新しいシミュレータを作成しました".green
+        stdout <<< "✓ Created a new simulator".green
         stdout <<< ""
 
         let deviceTypeName = extractDeviceTypeName(from: deviceType)
         let runtimeName = extractRuntimeDisplayName(from: runtime)
 
-        stdout <<< "作成されたシミュレータ:".bold
-        stdout <<< "  名前: \(name)".dim
-        stdout <<< "  タイプ: \(deviceTypeName)".dim
-        stdout <<< "  ランタイム: \(runtimeName)".dim
+        stdout <<< "Created simulator:".bold
+        stdout <<< "  Name: \(name)".dim
+        stdout <<< "  Type: \(deviceTypeName)".dim
+        stdout <<< "  Runtime: \(runtimeName)".dim
         stdout <<< "  UUID: \(uuid)".dim
 
         stdout <<< ""
-        stdout <<< "次のステップ:".dim
-        stdout <<< "  • シミュレータを起動: xsim start \"\(name)\"".dim
-        stdout <<< "  • すべてのシミュレータを確認: xsim list".dim
+        stdout <<< "Next steps:".dim
+        stdout <<< "  • Start the simulator: xsim start \"\(name)\"".dim
+        stdout <<< "  • List all simulators: xsim list".dim
     }
 
     /// Extracts a display-friendly runtime name from the runtime identifier

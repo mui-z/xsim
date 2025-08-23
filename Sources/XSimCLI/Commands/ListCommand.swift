@@ -4,25 +4,25 @@ import SwiftCLI
 /// Command to list available simulator devices
 class ListCommand: Command {
     let name = "list"
-    let shortDescription = "利用可能なシミュレータを一覧表示"
+    let shortDescription = "List available simulators"
     let longDescription = """
-    利用可能なシミュレータデバイスを一覧表示します。
-    デバイス名、UUID、現在のステータス、デバイスタイプ、iOSバージョンが表示されます。
+    Lists available simulator devices.
+    Displays device name, UUID, current status, device type, and platform version.
 
-    例:
-      xsim list                    # すべてのデバイスを表示
-      xsim list --running          # 実行中のデバイスのみ表示
-      xsim list --available        # 利用可能なデバイスのみ表示
-      xsim list --resolve-names    # ランタイム/タイプ名をJSONで解決
+    Examples:
+      xsim list                    # show all devices
+      xsim list --running          # only running devices
+      xsim list --available        # only available devices
+      xsim list --resolve-names    # resolve runtime/type names via JSON
     """
 
-    @Flag("-r", "--running", description: "実行中のシミュレータのみ表示")
+    @Flag("-r", "--running", description: "Show only running simulators")
     var showRunningOnly: Bool
 
-    @Flag("-a", "--available", description: "利用可能なシミュレータのみ表示")
+    @Flag("-a", "--available", description: "Show only available simulators")
     var showAvailableOnly: Bool
 
-    @Flag("--resolve-names", description: "ランタイム/デバイスタイプ名をJSONで正確に解決 (追加のsimctl呼び出し)")
+    @Flag("--resolve-names", description: "Resolve runtime/device type names via JSON (extra simctl calls)")
     var resolveNames: Bool
 
     private var simulatorService: SimulatorService?
@@ -68,7 +68,7 @@ class ListCommand: Command {
         } catch let error as SimulatorError {
             throw CLI.Error(message: error.localizedDescription)
         } catch {
-            throw CLI.Error(message: "予期しないエラーが発生しました: \(error.localizedDescription)")
+            throw CLI.Error(message: "An unexpected error occurred: \(error.localizedDescription)")
         }
     }
 
@@ -98,14 +98,14 @@ class ListCommand: Command {
     /// Displays a message when no devices are found
     private func displayNoDevicesMessage() {
         if showRunningOnly {
-            stdout <<< "実行中のシミュレータはありません。".yellow
-            stdout <<< "シミュレータを起動するには: xsim start <device>".dim
+            stdout <<< "No simulators are running.".yellow
+            stdout <<< "To start a simulator: xsim start <device>".dim
         } else if showAvailableOnly {
-            stdout <<< "利用可能なシミュレータはありません。".yellow
-            stdout <<< "新しいシミュレータを作成するには: xsim create <name> <type> <runtime>".dim
+            stdout <<< "No available simulators.".yellow
+            stdout <<< "To create a simulator: xsim create <name> <type> <runtime>".dim
         } else {
-            stdout <<< "シミュレータが見つかりません。".yellow
-            stdout <<< "新しいシミュレータを作成するには: xsim create <name> <type> <runtime>".dim
+            stdout <<< "No simulators found.".yellow
+            stdout <<< "To create a simulator: xsim create <name> <type> <runtime>".dim
         }
     }
 
@@ -142,9 +142,9 @@ class ListCommand: Command {
     /// Displays the table header
     private func displayTableHeader() {
         let header =
-            pad(truncateString("名前", maxLength: 25), to: 25) + " " +
-            pad(truncateString("状態", maxLength: 8), to: 8) + " " +
-            pad(truncateString("デバイスタイプ", maxLength: 20), to: 20) + " " +
+            pad(truncateString("Name", maxLength: 25), to: 25) + " " +
+            pad(truncateString("State", maxLength: 8), to: 8) + " " +
+            pad(truncateString("Device Type", maxLength: 20), to: 20) + " " +
             "UUID"
         stdout <<< header.bold
         stdout <<< String(repeating: "-", count: 80).dim
@@ -164,18 +164,18 @@ class ListCommand: Command {
     /// Formats the device state with appropriate colors
     private func formatDeviceState(_ state: SimulatorState, isAvailable: Bool) -> String {
         if !isAvailable {
-            return "無効".red
+            return "Unavailable".red
         }
 
         switch state {
         case .booted:
-            return "起動中".green
+            return "Booted".green
         case .booting:
-            return "起動処理中".yellow
+            return "Booting".yellow
         case .shutdown:
-            return "停止中".dim
+            return "Shutdown".dim
         case .shuttingDown:
-            return "停止処理中".yellow
+            return "Shutting down".yellow
         }
     }
 
@@ -187,11 +187,11 @@ class ListCommand: Command {
         let runningCount = devices.count(where: { $0.state.isRunning })
         let availableCount = devices.count(where: { $0.isAvailable })
 
-        stdout <<< "合計: \(totalCount)台, 実行中: \(runningCount)台, 利用可能: \(availableCount)台".dim
+        stdout <<< "Total: \(totalCount), Running: \(runningCount), Available: \(availableCount)".dim
 
         if runningCount == 0, !showRunningOnly {
             stdout <<< ""
-            stdout <<< "ヒント: シミュレータを起動するには 'xsim start <device>' を使用してください".dim
+            stdout <<< "Tip: Use 'xsim start <device>' to boot a simulator".dim
         }
     }
 

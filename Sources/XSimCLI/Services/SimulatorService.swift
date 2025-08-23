@@ -579,7 +579,8 @@ class SimulatorService {
         xcrunPath = try SimulatorService.findXcrunPath()
         // Debug: Print the found xcrun path
         print("Debug: Using xcrun at path: \(xcrunPath)")
-        try validateSimctlAvailability()
+        // NOTE: for debugging code.
+        // try validateSimctlAvailability()
     }
 }
 

@@ -58,13 +58,13 @@ public enum SimulatorState: String, CaseIterable, Codable {
     public var displayName: String {
         switch self {
         case .shutdown:
-            "停止中"
+            "Shutdown"
         case .booted:
-            "起動中"
+            "Booted"
         case .booting:
-            "起動処理中"
+            "Booting"
         case .shuttingDown:
-            "停止処理中"
+            "Shutting down"
         }
     }
 }

@@ -4,14 +4,14 @@ import SwiftCLI
 /// Command to start a simulator device
 class StartCommand: Command {
     let name = "start"
-    let shortDescription = "シミュレータを起動"
+    let shortDescription = "Start a simulator"
     let longDescription = """
-    指定されたシミュレータデバイスを起動します。
-    デバイスは名前またはUUIDで指定できます。
+    Starts the specified simulator device.
+    You can specify the device by name or UUID.
 
-    例:
-      xsim start "iPhone 15"                    # 名前で指定
-      xsim start 12345678-1234-1234-1234-123456789012  # UUIDで指定
+    Examples:
+      xsim start "iPhone 15"                    # by name
+      xsim start 12345678-1234-1234-1234-123456789012  # by UUID
     """
 
     @Param var deviceIdentifier: String
@@ -22,7 +22,7 @@ class StartCommand: Command {
 
     func execute() throws {
         do {
-            stdout <<< "シミュレータを起動しています...".dim
+            stdout <<< "Starting simulator...".dim
 
             // Start the simulator
             let simulatorService = try getService()
@@ -33,13 +33,13 @@ class StartCommand: Command {
             if let device = findDevice(devices: devices, identifier: deviceIdentifier) {
                 displayStartSuccess(device: device)
             } else {
-                stdout <<< "✓ シミュレータ '\(deviceIdentifier)' を起動しました".green
+                stdout <<< "✓ Started simulator '\(deviceIdentifier)'".green
             }
 
         } catch let error as SimulatorError {
             try handleSimulatorError(error)
         } catch {
-            throw CLI.Error(message: "予期しないエラーが発生しました: \(error.localizedDescription)")
+            throw CLI.Error(message: "An unexpected error occurred: \(error.localizedDescription)")
         }
     }
 
@@ -47,14 +47,14 @@ class StartCommand: Command {
     private func handleSimulatorError(_ error: SimulatorError) throws {
         switch error {
         case let .deviceNotFound(identifier):
-            stdout <<< "✗ デバイス '\(identifier)' が見つかりません".red
+            stdout <<< "✗ Device '\(identifier)' not found".red
             stdout <<< ""
-            stdout <<< "利用可能なデバイスを確認するには:".dim
+            stdout <<< "To list available devices:".dim
             stdout <<< "  xsim list".cyan
             throw CLI.Error(message: "")
 
         case let .deviceAlreadyRunning(identifier):
-            stdout <<< "ℹ デバイス '\(identifier)' は既に起動しています".yellow
+            stdout <<< "ℹ Device '\(identifier)' is already running".yellow
 
             // Try to get device info to show current status
             do {
@@ -82,31 +82,31 @@ class StartCommand: Command {
 
     /// Displays success message with device information
     private func displayStartSuccess(device: SimulatorDevice) {
-        stdout <<< "✓ シミュレータを起動しました".green
+        stdout <<< "✓ Simulator started".green
         stdout <<< ""
 
         let deviceTypeName = extractDeviceTypeName(from: device.deviceTypeIdentifier)
         let runtimeName = extractRuntimeDisplayName(from: device.runtimeIdentifier)
 
-        stdout <<< "デバイス情報:".bold
-        stdout <<< "  名前: \(device.name)".dim
-        stdout <<< "  タイプ: \(deviceTypeName)".dim
-        stdout <<< "  ランタイム: \(runtimeName)".dim
+        stdout <<< "Device Information:".bold
+        stdout <<< "  Name: \(device.name)".dim
+        stdout <<< "  Type: \(deviceTypeName)".dim
+        stdout <<< "  Runtime: \(runtimeName)".dim
         stdout <<< "  UUID: \(device.udid)".dim
-        stdout <<< "  状態: \(formatDeviceState(device.state))".dim
+        stdout <<< "  State: \(formatDeviceState(device.state))".dim
 
         if device.state == .booting {
             stdout <<< ""
-            stdout <<< "ヒント: シミュレータの起動が完了するまでしばらくお待ちください".dim
+            stdout <<< "Tip: Please wait for the simulator to finish booting.".dim
         }
     }
 
     /// Displays current device status
     private func displayDeviceStatus(device: SimulatorDevice) {
         stdout <<< ""
-        stdout <<< "現在の状態:".dim
-        stdout <<< "  名前: \(device.name)"
-        stdout <<< "  状態: \(formatDeviceState(device.state))"
+        stdout <<< "Current Status:".dim
+        stdout <<< "  Name: \(device.name)"
+        stdout <<< "  State: \(formatDeviceState(device.state))"
         stdout <<< "  UUID: \(device.udid)".dim
     }
 
@@ -125,13 +125,13 @@ class StartCommand: Command {
     private func formatDeviceState(_ state: SimulatorState) -> String {
         switch state {
         case .booted:
-            "起動中".green
+            "Booted".green
         case .booting:
-            "起動処理中".yellow
+            "Booting".yellow
         case .shutdown:
-            "停止中".dim
+            "Shutdown".dim
         case .shuttingDown:
-            "停止処理中".yellow
+            "Shutting down".yellow
         }
     }
 

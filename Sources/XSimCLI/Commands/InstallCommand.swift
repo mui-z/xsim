@@ -5,13 +5,13 @@ import SwiftCLI
 /// Command to install an app on a simulator device
 class InstallCommand: Command {
     let name = "install"
-    let shortDescription = "シミュレータにアプリをインストール"
+    let shortDescription = "Install an app to a simulator"
     let longDescription = """
-    指定されたシミュレータデバイスにアプリケーションをインストールします。
-    アプリは.appバンドルのパスで指定し、対象デバイスは名前またはUUIDで指定します。
-    デバイスが停止している場合は、自動的に起動されます。
+    Installs an application to the specified simulator device.
+    Provide the .app bundle path, and specify the target device by name or UUID.
+    If the device is stopped, it will be started automatically.
 
-    例:
+    Examples:
       xsim install "iPhone 15" /path/to/MyApp.app
       xsim install 12345678-1234-1234-1234-123456789012 ~/Desktop/MyApp.app
     """
@@ -40,16 +40,16 @@ class InstallCommand: Command {
 
             // Check if device needs to be started
             if !device.state.isRunning {
-                stdout <<< "デバイスが停止しています。起動しています...".dim
+                stdout <<< "Device is stopped. Starting it...".dim
                 try simulatorService.startSimulator(identifier: deviceIdentifier)
-                stdout <<< "✓ デバイスを起動しました".green
+                stdout <<< "✓ Started the device".green
                 stdout <<< ""
             }
 
             // Get app info
             let appInfo = try extractAppInfo(from: expandedPath)
 
-            stdout <<< "アプリをインストールしています...".dim
+            stdout <<< "Installing the app...".dim
 
             // Install the app
             try simulatorService.installApp(bundlePath: expandedPath, deviceIdentifier: deviceIdentifier)
@@ -59,7 +59,7 @@ class InstallCommand: Command {
         } catch let error as SimulatorError {
             try handleSimulatorError(error)
         } catch {
-            throw CLI.Error(message: "予期しないエラーが発生しました: \(error.localizedDescription)")
+            throw CLI.Error(message: "An unexpected error occurred: \(error.localizedDescription)")
         }
     }
 
@@ -122,25 +122,25 @@ class InstallCommand: Command {
     private func handleSimulatorError(_ error: SimulatorError) throws {
         switch error {
         case let .deviceNotFound(identifier):
-            stdout <<< "✗ デバイス '\(identifier)' が見つかりません".red
+            stdout <<< "✗ Device '\(identifier)' not found".red
             stdout <<< ""
-            stdout <<< "利用可能なデバイスを確認するには:".dim
+            stdout <<< "To list available devices:".dim
             stdout <<< "  xsim list".cyan
             throw CLI.Error(message: "")
 
         case let .appBundleNotFound(path):
-            stdout <<< "✗ アプリバンドルが見つかりません: \(path)".red
+            stdout <<< "✗ App bundle not found: \(path)".red
             stdout <<< ""
-            stdout <<< "確認事項:".dim
-            stdout <<< "  • パスが正しいか確認してください"
-            stdout <<< "  • ファイルが.app拡張子を持っているか確認してください"
-            stdout <<< "  • Info.plistファイルが存在するか確認してください"
+            stdout <<< "Please check:".dim
+            stdout <<< "  • The path is correct"
+            stdout <<< "  • The file has a .app extension"
+            stdout <<< "  • The bundle contains an Info.plist file"
             throw CLI.Error(message: "")
 
         case let .deviceNotRunning(identifier):
-            stdout <<< "✗ デバイス '\(identifier)' が起動していません".red
+            stdout <<< "✗ Device '\(identifier)' is not running".red
             stdout <<< ""
-            stdout <<< "デバイスを起動してから再試行してください:".dim
+            stdout <<< "Start the device, then retry:".dim
             stdout <<< "  xsim start \"\(identifier)\"".cyan
             throw CLI.Error(message: "")
 
@@ -151,36 +151,36 @@ class InstallCommand: Command {
 
     /// Displays success message after installation
     private func displayInstallSuccess(device: SimulatorDevice, appInfo: AppInfo, appPath: String) {
-        stdout <<< "✓ アプリのインストールが完了しました".green
+        stdout <<< "✓ App installation completed".green
         stdout <<< ""
 
         let deviceTypeName = extractDeviceTypeName(from: device.deviceTypeIdentifier)
         let runtimeName = extractRuntimeDisplayName(from: device.runtimeIdentifier)
 
-        stdout <<< "インストール情報:".bold
-        stdout <<< "  アプリ名: \(appInfo.name)".dim
+        stdout <<< "Install Information:".bold
+        stdout <<< "  App Name: \(appInfo.name)".dim
 
         if let bundleId = appInfo.bundleIdentifier {
-            stdout <<< "  バンドルID: \(bundleId)".dim
+            stdout <<< "  Bundle ID: \(bundleId)".dim
         }
 
         if let version = appInfo.version {
-            stdout <<< "  バージョン: \(version)".dim
+            stdout <<< "  Version: \(version)".dim
         }
 
-        stdout <<< "  パス: \(appPath)".dim
+        stdout <<< "  Path: \(appPath)".dim
         stdout <<< ""
-        stdout <<< "インストール先:".bold
-        stdout <<< "  デバイス: \(device.name)".dim
-        stdout <<< "  タイプ: \(deviceTypeName)".dim
-        stdout <<< "  ランタイム: \(runtimeName)".dim
+        stdout <<< "Installed To:".bold
+        stdout <<< "  Device: \(device.name)".dim
+        stdout <<< "  Type: \(deviceTypeName)".dim
+        stdout <<< "  Runtime: \(runtimeName)".dim
         stdout <<< "  UUID: \(device.udid)".dim
 
         stdout <<< ""
-        stdout <<< "ヒント:".dim
-        stdout <<< "  • シミュレータでアプリを確認してください"
+        stdout <<< "Tips:".dim
+        stdout <<< "  • Verify the app in the simulator"
         if let bundleId = appInfo.bundleIdentifier {
-            stdout <<< "  • アプリを起動するには: xcrun simctl launch \(device.udid) \(bundleId)".dim
+            stdout <<< "  • To launch the app: xcrun simctl launch \(device.udid) \(bundleId)".dim
         }
     }
 
