@@ -1,10 +1,11 @@
+import Dispatch
 import Foundation
 
 /// Service class for managing iOS Simulator operations through simctl
 class SimulatorService {
     // MARK: - Private Properties
 
-    private let simctlPath = "/usr/bin/xcrun"
+    private let xcrunPath: String
 
     // MARK: - Core simctl Execution Utilities
 
@@ -14,19 +15,30 @@ class SimulatorService {
     ///   - requiresJSON: Whether the command should return JSON output
     /// - Returns: The command output as Data
     /// - Throws: SimulatorError if the command fails
-    private func executeSimctlCommand(arguments: [String], requiresJSON: Bool = false) throws -> Data {
+    private func executeSimctlCommand(arguments: [String], requiresJSON: Bool = false, timeoutSeconds: TimeInterval? = nil) throws -> Data {
         let process = Process()
-        process.executableURL = URL(fileURLWithPath: simctlPath)
+        process.executableURL = URL(fileURLWithPath: xcrunPath)
 
         var fullArguments = ["simctl"]
         fullArguments.append(contentsOf: arguments)
 
-        // Add JSON output flag if required
+        // Add JSON output flag if required.
+        // simctl expects --json as an option to the 'list' subcommand, e.g.:
+        //   xcrun simctl list --json devices
+        // not before the subcommand. Place it right after 'list' when present.
         if requiresJSON, !arguments.contains("--json") {
-            fullArguments.insert("--json", at: 1)
+            if let listIndex = fullArguments.firstIndex(of: "list") {
+                fullArguments.insert("--json", at: listIndex + 1)
+            } else {
+                // Fallback: if 'list' isn't present for some reason, append at end
+                fullArguments.append("--json")
+            }
         }
 
         process.arguments = fullArguments
+
+        // Debug: Print the command being executed
+        print("Debug: Executing command: \(xcrunPath) \(fullArguments.joined(separator: " "))")
 
         let outputPipe = Pipe()
         let errorPipe = Pipe()
@@ -36,14 +48,71 @@ class SimulatorService {
 
         do {
             try process.run()
-            process.waitUntilExit()
+
+            var didTimeout = false
+            if let timeout = timeoutSeconds {
+                let group = DispatchGroup()
+                group.enter()
+                DispatchQueue.global().async {
+                    process.waitUntilExit()
+                    group.leave()
+                }
+                let result = group.wait(timeout: .now() + timeout)
+                if result == .timedOut {
+                    didTimeout = true
+                    process.terminate()
+                }
+            } else {
+                process.waitUntilExit()
+            }
 
             let outputData = outputPipe.fileHandleForReading.readDataToEndOfFile()
             let errorData = errorPipe.fileHandleForReading.readDataToEndOfFile()
 
+            if didTimeout {
+                print("Debug: simctl timed out after \(timeoutSeconds ?? 0)s. args=\(fullArguments.joined(separator: " "))")
+                throw SimulatorError.operationTimeout
+            }
+
             if process.terminationStatus != 0 {
-                let errorMessage = String(data: errorData, encoding: .utf8) ?? "Unknown error"
-                throw SimulatorError.simctlCommandFailed(errorMessage)
+                let stderrText = String(data: errorData, encoding: .utf8) ?? ""
+                let stdoutText = String(data: outputData, encoding: .utf8) ?? ""
+
+                // Many simctl errors print to stdout instead of stderr; prefer stderr, fall back to stdout.
+                let primaryMessage: String = {
+                    let trimmedErr = stderrText.trimmingCharacters(in: .whitespacesAndNewlines)
+                    if !trimmedErr.isEmpty { return trimmedErr }
+                    let trimmedOut = stdoutText.trimmingCharacters(in: .whitespacesAndNewlines)
+                    if !trimmedOut.isEmpty { return trimmedOut }
+                    return "Unknown error"
+                }()
+
+                // Emit a concise debug summary with both streams for troubleshooting.
+                let previewOut = stdoutText.prefix(200)
+                let previewErr = stderrText.prefix(200)
+                print("Debug: simctl failed. code=\(process.terminationStatus) stdout=\(previewOut) stderr=\(previewErr)")
+
+                // If JSON was requested and the tool likely doesn't support it, probe without --json
+                if requiresJSON {
+                    let lower = primaryMessage.lowercased()
+                    let mentionsJSONUnsupported = lower.contains("unrecognized") || lower.contains("unknown option") || lower.contains("--json")
+                    if mentionsJSONUnsupported {
+                        if let probe = try? executeSimctlCommand(arguments: arguments, requiresJSON: false),
+                           let probePreview = String(data: probe.prefix(200), encoding: .utf8)
+                        {
+                            throw SimulatorError.simctlCommandFailed("simctl's JSON output may not be supported by your Xcode. Please update Xcode (Xcode 9+). Raw output preview: \(probePreview)...")
+                        } else {
+                            throw SimulatorError.simctlCommandFailed("simctl's JSON output may not be supported by your Xcode. Please update Xcode (Xcode 9+). Error: \(primaryMessage)")
+                        }
+                    }
+                }
+
+                throw SimulatorError.simctlCommandFailed(primaryMessage)
+            }
+
+            if requiresJSON {
+                let preview = String(data: outputData.prefix(200), encoding: .utf8) ?? "<non-utf8>"
+                print("Debug: JSON bytes=\(outputData.count). preview=\(preview)")
             }
 
             return outputData
@@ -65,23 +134,73 @@ class SimulatorService {
             let decoder = JSONDecoder()
             return try decoder.decode(type, from: data)
         } catch {
+            let preview = String(data: data.prefix(200), encoding: .utf8) ?? "<non-utf8>"
+            print("Debug: JSON decode failed. preview=\(preview)")
             throw SimulatorError.simctlCommandFailed("Failed to parse JSON output: \(error.localizedDescription)")
         }
+    }
+
+    /// Finds the xcrun executable path
+    /// - Returns: Path to xcrun executable
+    /// - Throws: SimulatorError if xcrun is not found
+    private static func findXcrunPath() throws -> String {
+        let possiblePaths = [
+            "/usr/bin/xcrun",
+            "/Applications/Xcode.app/Contents/Developer/usr/bin/xcrun",
+            "/Library/Developer/CommandLineTools/usr/bin/xcrun",
+        ]
+
+        let fileManager = FileManager.default
+
+        for path in possiblePaths {
+            if fileManager.fileExists(atPath: path) {
+                return path
+            }
+        }
+
+        // Try to find xcrun using which command
+        let process = Process()
+        process.launchPath = "/usr/bin/which"
+        process.arguments = ["xcrun"]
+
+        let pipe = Pipe()
+        process.standardOutput = pipe
+
+        do {
+            try process.run()
+            process.waitUntilExit()
+
+            if process.terminationStatus == 0 {
+                let data = pipe.fileHandleForReading.readDataToEndOfFile()
+                if let path = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines),
+                   !path.isEmpty
+                {
+                    return path
+                }
+            }
+        } catch {
+            // Fall through to error
+        }
+
+        throw SimulatorError.simctlCommandFailed("xcrun command not found. Please ensure Xcode Command Line Tools are installed.")
     }
 
     /// Validates that simctl is available on the system
     /// - Throws: SimulatorError if simctl is not available
     private func validateSimctlAvailability() throws {
-        let fileManager = FileManager.default
-        guard fileManager.fileExists(atPath: simctlPath) else {
-            throw SimulatorError.simctlCommandFailed("xcrun command not found. Please ensure Xcode Command Line Tools are installed.")
-        }
-
         // Test basic simctl availability
         do {
             _ = try executeSimctlCommand(arguments: ["help"])
+        } catch let error as SimulatorError {
+            // Re-throw with more context
+            switch error {
+            case let .simctlCommandFailed(message):
+                throw SimulatorError.simctlCommandFailed("simctl validation failed: \(message)")
+            default:
+                throw error
+            }
         } catch {
-            throw SimulatorError.simctlCommandFailed("simctl is not available. Please ensure Xcode is properly installed.")
+            throw SimulatorError.simctlCommandFailed("simctl is not available. Please ensure Xcode is properly installed. Error: \(error.localizedDescription)")
         }
     }
 
@@ -130,6 +249,7 @@ class SimulatorService {
             }
         }
 
+        print("Debug: Parsed devices count: \(devices.count)")
         return devices
     }
 
@@ -313,7 +433,7 @@ class SimulatorService {
     /// - Returns: Array of DeviceType objects
     /// - Throws: SimulatorError if the operation fails
     func getAvailableDeviceTypes() throws -> [DeviceType] {
-        let data = try executeSimctlCommand(arguments: ["list", "devicetypes"], requiresJSON: true)
+        let data = try executeSimctlCommand(arguments: ["list", "devicetypes"], requiresJSON: true, timeoutSeconds: 8)
         let response = try parseJSONOutput(data, as: SimctlDeviceTypesResponse.self)
 
         return response.devicetypes.map { deviceTypeData in
@@ -328,7 +448,7 @@ class SimulatorService {
     /// - Returns: Array of Runtime objects
     /// - Throws: SimulatorError if the operation fails
     func getAvailableRuntimes() throws -> [Runtime] {
-        let data = try executeSimctlCommand(arguments: ["list", "runtimes"], requiresJSON: true)
+        let data = try executeSimctlCommand(arguments: ["list", "runtimes"], requiresJSON: true, timeoutSeconds: 8)
         let response = try parseJSONOutput(data, as: SimctlRuntimesResponse.self)
 
         return response.runtimes.map { runtimeData in
@@ -456,6 +576,9 @@ class SimulatorService {
     // MARK: - Initialization
 
     init() throws {
+        xcrunPath = try SimulatorService.findXcrunPath()
+        // Debug: Print the found xcrun path
+        print("Debug: Using xcrun at path: \(xcrunPath)")
         try validateSimctlAvailability()
     }
 }

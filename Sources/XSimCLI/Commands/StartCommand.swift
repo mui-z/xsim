@@ -16,17 +16,16 @@ class StartCommand: Command {
 
     @Param var deviceIdentifier: String
 
-    private let simulatorService: SimulatorService
+    private var simulatorService: SimulatorService?
 
-    init() throws {
-        simulatorService = try SimulatorService()
-    }
+    init() {}
 
     func execute() throws {
         do {
             stdout <<< "シミュレータを起動しています...".dim
 
             // Start the simulator
+            let simulatorService = try getService()
             try simulatorService.startSimulator(identifier: deviceIdentifier)
 
             // Get device info for confirmation
@@ -59,6 +58,7 @@ class StartCommand: Command {
 
             // Try to get device info to show current status
             do {
+                let simulatorService = try getService()
                 let devices = try simulatorService.listDevices()
                 if let device = findDevice(devices: devices, identifier: identifier) {
                     displayDeviceStatus(device: device)
@@ -70,6 +70,14 @@ class StartCommand: Command {
         default:
             throw CLI.Error(message: error.localizedDescription)
         }
+    }
+
+    /// Lazily creates the SimulatorService on first use
+    private func getService() throws -> SimulatorService {
+        if let service = simulatorService { return service }
+        let service = try SimulatorService()
+        simulatorService = service
+        return service
     }
 
     /// Displays success message with device information

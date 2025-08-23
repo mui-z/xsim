@@ -17,15 +17,14 @@ class ResetCommand: Command {
 
     @Param var deviceIdentifier: String
 
-    private let simulatorService: SimulatorService
+    private var simulatorService: SimulatorService?
 
-    init() throws {
-        simulatorService = try SimulatorService()
-    }
+    init() {}
 
     func execute() throws {
         do {
             // Get device info before resetting
+            let simulatorService = try getService()
             let devices = try simulatorService.listDevices()
             guard let device = findDevice(devices: devices, identifier: deviceIdentifier) else {
                 throw SimulatorError.deviceNotFound(deviceIdentifier)
@@ -185,5 +184,15 @@ class ResetCommand: Command {
         }
 
         return lastComponent.replacingOccurrences(of: "-", with: " ")
+    }
+}
+
+// Lazy service accessor
+extension ResetCommand {
+    private func getService() throws -> SimulatorService {
+        if let service = simulatorService { return service }
+        let service = try SimulatorService()
+        simulatorService = service
+        return service
     }
 }

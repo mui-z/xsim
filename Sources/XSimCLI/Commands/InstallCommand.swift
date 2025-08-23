@@ -19,11 +19,9 @@ class InstallCommand: Command {
     @Param var deviceIdentifier: String
     @Param var appBundlePath: String
 
-    private let simulatorService: SimulatorService
+    private var simulatorService: SimulatorService?
 
-    init() throws {
-        simulatorService = try SimulatorService()
-    }
+    init() {}
 
     func execute() throws {
         do {
@@ -34,6 +32,7 @@ class InstallCommand: Command {
             try validateAppBundle(at: expandedPath)
 
             // Get device info
+            let simulatorService = try getService()
             let devices = try simulatorService.listDevices()
             guard let device = findDevice(devices: devices, identifier: deviceIdentifier) else {
                 throw SimulatorError.deviceNotFound(deviceIdentifier)
@@ -225,6 +224,16 @@ class InstallCommand: Command {
         }
 
         return lastComponent.replacingOccurrences(of: "-", with: " ")
+    }
+}
+
+// Lazy service accessor
+extension InstallCommand {
+    private func getService() throws -> SimulatorService {
+        if let service = simulatorService { return service }
+        let service = try SimulatorService()
+        simulatorService = service
+        return service
     }
 }
 

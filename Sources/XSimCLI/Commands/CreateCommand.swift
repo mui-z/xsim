@@ -25,11 +25,9 @@ class CreateCommand: Command {
     @Flag("--list-runtimes", description: "利用可能なランタイムを一覧表示")
     var listRuntimes: Bool
 
-    private let simulatorService: SimulatorService
+    private var simulatorService: SimulatorService?
 
-    init() throws {
-        simulatorService = try SimulatorService()
-    }
+    init() {}
 
     func execute() throws {
         do {
@@ -63,6 +61,7 @@ class CreateCommand: Command {
             stdout <<< "新しいシミュレータを作成しています...".dim
 
             // Create the simulator
+            let simulatorService = try getService()
             let uuid = try simulatorService.createSimulator(name: name, deviceType: deviceType, runtime: runtime)
 
             displayCreateSuccess(name: name, deviceType: deviceType, runtime: runtime, uuid: uuid)
@@ -76,6 +75,7 @@ class CreateCommand: Command {
 
     /// Displays available device types
     private func displayAvailableDeviceTypes() throws {
+        let simulatorService = try getService()
         let deviceTypes = try simulatorService.getAvailableDeviceTypes()
 
         if deviceTypes.isEmpty {
@@ -120,6 +120,7 @@ class CreateCommand: Command {
 
     /// Displays available runtimes
     private func displayAvailableRuntimes() throws {
+        let simulatorService = try getService()
         let runtimes = try simulatorService.getAvailableRuntimes()
 
         if runtimes.isEmpty {
@@ -261,5 +262,15 @@ class CreateCommand: Command {
         }
 
         return lastComponent.replacingOccurrences(of: "-", with: " ")
+    }
+}
+
+// Lazy service accessor
+extension CreateCommand {
+    private func getService() throws -> SimulatorService {
+        if let service = simulatorService { return service }
+        let service = try SimulatorService()
+        simulatorService = service
+        return service
     }
 }

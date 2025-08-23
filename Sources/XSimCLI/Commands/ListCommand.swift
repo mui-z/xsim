@@ -13,6 +13,7 @@ class ListCommand: Command {
       xsim list                    # すべてのデバイスを表示
       xsim list --running          # 実行中のデバイスのみ表示
       xsim list --available        # 利用可能なデバイスのみ表示
+      xsim list --resolve-names    # ランタイム/タイプ名をJSONで解決
     """
 
     @Flag("-r", "--running", description: "実行中のシミュレータのみ表示")
@@ -21,31 +22,62 @@ class ListCommand: Command {
     @Flag("-a", "--available", description: "利用可能なシミュレータのみ表示")
     var showAvailableOnly: Bool
 
-    private let simulatorService: SimulatorService
+    @Flag("--resolve-names", description: "ランタイム/デバイスタイプ名をJSONで正確に解決 (追加のsimctl呼び出し)" )
+    var resolveNames: Bool
 
-    init() throws {
-        simulatorService = try SimulatorService()
-    }
+    private var simulatorService: SimulatorService?
+
+    init() {}
 
     func execute() throws {
         do {
+            let simulatorService = try getService()
             let devices = try simulatorService.listDevices()
+
+            // Optionally build display-name maps using simctl's JSON outputs
+            var runtimeNameById: [String: String] = [:]
+            var deviceTypeNameById: [String: String] = [:]
+            if resolveNames {
+                do {
+                    let runtimes = try simulatorService.getAvailableRuntimes()
+                    runtimeNameById = Dictionary(uniqueKeysWithValues: runtimes.map { ($0.identifier, $0.displayName) })
+                    let types = try simulatorService.getAvailableDeviceTypes()
+                    deviceTypeNameById = Dictionary(uniqueKeysWithValues: types.map { ($0.identifier, $0.displayName) })
+                } catch {
+                    // Fallback to heuristic parsing if lookup fails
+                    runtimeNameById = [:]
+                    deviceTypeNameById = [:]
+                }
+            }
+
+            // Debug: Print counts before filtering
+            print("Debug: Total devices fetched: \(devices.count). runningOnly=\(showRunningOnly), availableOnly=\(showAvailableOnly)")
 
             // Filter devices based on flags
             let filteredDevices = filterDevices(devices)
 
             if filteredDevices.isEmpty {
+                // Debug: No devices after filtering
+                print("Debug: No devices after filtering. Original=\(devices.count)")
                 displayNoDevicesMessage()
                 return
             }
 
-            displayDevices(filteredDevices)
+            displayDevices(filteredDevices, runtimeNameById: runtimeNameById, deviceTypeNameById: deviceTypeNameById)
 
         } catch let error as SimulatorError {
             throw CLI.Error(message: error.localizedDescription)
         } catch {
             throw CLI.Error(message: "予期しないエラーが発生しました: \(error.localizedDescription)")
         }
+    }
+
+    /// Lazily creates the SimulatorService on first use
+    private func getService() throws -> SimulatorService {
+        if let service = simulatorService { return service }
+        let service = try SimulatorService()
+        simulatorService = service
+        return service
     }
 
     /// Filters devices based on command flags
@@ -78,10 +110,10 @@ class ListCommand: Command {
     }
 
     /// Displays devices in a formatted table
-    private func displayDevices(_ devices: [SimulatorDevice]) {
+    private func displayDevices(_ devices: [SimulatorDevice], runtimeNameById: [String: String], deviceTypeNameById: [String: String]) {
         // Group devices by runtime for better organization
         let groupedDevices = Dictionary(grouping: devices) { device in
-            extractRuntimeDisplayName(from: device.runtimeIdentifier)
+            runtimeNameById[device.runtimeIdentifier] ?? extractRuntimeDisplayName(from: device.runtimeIdentifier)
         }
 
         let sortedRuntimes = groupedDevices.keys.sorted()
@@ -99,7 +131,7 @@ class ListCommand: Command {
             // Display devices for this runtime
             let sortedDevices = devicesForRuntime.sorted { $0.name < $1.name }
             for device in sortedDevices {
-                displayDeviceRow(device)
+                displayDeviceRow(device, deviceTypeNameById: deviceTypeNameById)
             }
         }
 
@@ -109,23 +141,24 @@ class ListCommand: Command {
 
     /// Displays the table header
     private func displayTableHeader() {
-        let header = String(format: "%-25s %-8s %-20s %s", "名前", "状態", "デバイスタイプ", "UUID")
+        let header =
+            pad(truncateString("名前", maxLength: 25), to: 25) + " " +
+            pad(truncateString("状態", maxLength: 8), to: 8) + " " +
+            pad(truncateString("デバイスタイプ", maxLength: 20), to: 20) + " " +
+            "UUID"
         stdout <<< header.bold
         stdout <<< String(repeating: "-", count: 80).dim
     }
 
     /// Displays a single device row
-    private func displayDeviceRow(_ device: SimulatorDevice) {
-        let deviceTypeName = extractDeviceTypeName(from: device.deviceTypeIdentifier)
+    private func displayDeviceRow(_ device: SimulatorDevice, deviceTypeNameById: [String: String]) {
+        let resolvedTypeName = deviceTypeNameById[device.deviceTypeIdentifier] ?? extractDeviceTypeName(from: device.deviceTypeIdentifier)
         let stateDisplay = formatDeviceState(device.state, isAvailable: device.isAvailable)
 
-        let row = String(format: "%-25s %-8s %-20s %s",
-                         truncateString(device.name, maxLength: 24),
-                         stateDisplay,
-                         truncateString(deviceTypeName, maxLength: 19),
-                         device.udid.dim)
-
-        stdout <<< row
+        let nameCol = pad(truncateString(device.name, maxLength: 25), to: 25)
+        let stateCol = pad(truncateString(stateDisplay, maxLength: 8), to: 8)
+        let typeCol = pad(truncateString(resolvedTypeName, maxLength: 20), to: 20)
+        stdout <<< "\(nameCol) \(stateCol) \(typeCol) \(device.udid.dim)"
     }
 
     /// Formats the device state with appropriate colors
@@ -204,5 +237,12 @@ class ListCommand: Command {
 
         let truncated = String(string.prefix(maxLength - 3))
         return truncated + "..."
+    }
+
+    /// Pads a string with spaces on the right to the specified width
+    private func pad(_ string: String, to width: Int) -> String {
+        let count = string.count
+        if count >= width { return string }
+        return string + String(repeating: " ", count: width - count)
     }
 }

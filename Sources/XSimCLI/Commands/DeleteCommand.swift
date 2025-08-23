@@ -20,15 +20,14 @@ class DeleteCommand: Command {
     @Flag("-f", "--force", description: "確認なしで削除を実行")
     var force: Bool
 
-    private let simulatorService: SimulatorService
+    private var simulatorService: SimulatorService?
 
-    init() throws {
-        simulatorService = try SimulatorService()
-    }
+    init() {}
 
     func execute() throws {
         do {
             // Get device info before deleting
+            let simulatorService = try getService()
             let devices = try simulatorService.listDevices()
             guard let device = findDevice(devices: devices, identifier: deviceIdentifier) else {
                 throw SimulatorError.deviceNotFound(deviceIdentifier)
@@ -195,5 +194,15 @@ class DeleteCommand: Command {
         }
 
         return lastComponent.replacingOccurrences(of: "-", with: " ")
+    }
+}
+
+// Lazy service accessor
+extension DeleteCommand {
+    private func getService() throws -> SimulatorService {
+        if let service = simulatorService { return service }
+        let service = try SimulatorService()
+        simulatorService = service
+        return service
     }
 }

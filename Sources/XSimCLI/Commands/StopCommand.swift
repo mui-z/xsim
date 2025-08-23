@@ -17,11 +17,9 @@ class StopCommand: Command {
 
     @Param var deviceIdentifier: String?
 
-    private let simulatorService: SimulatorService
+    private var simulatorService: SimulatorService?
 
-    init() throws {
-        simulatorService = try SimulatorService()
-    }
+    init() {}
 
     func execute() throws {
         do {
@@ -45,6 +43,7 @@ class StopCommand: Command {
         stdout <<< "シミュレータを停止しています...".dim
 
         // Get device info before stopping
+        let simulatorService = try getService()
         let devices = try simulatorService.listDevices()
         guard let device = findDevice(devices: devices, identifier: identifier) else {
             throw SimulatorError.deviceNotFound(identifier)
@@ -59,6 +58,7 @@ class StopCommand: Command {
     /// Stops all running devices
     private func stopAllDevices() throws {
         // Get list of running devices before stopping
+        let simulatorService = try getService()
         let devices = try simulatorService.listDevices()
         let runningDevices = devices.filter(\.state.isRunning)
 
@@ -90,6 +90,7 @@ class StopCommand: Command {
 
             // Try to get device info to show current status
             do {
+                let simulatorService = try getService()
                 let devices = try simulatorService.listDevices()
                 if let device = findDevice(devices: devices, identifier: identifier) {
                     displayDeviceStatus(device: device)
@@ -196,5 +197,15 @@ class StopCommand: Command {
         }
 
         return lastComponent.replacingOccurrences(of: "-", with: " ")
+    }
+}
+
+// Lazy service accessor
+extension StopCommand {
+    private func getService() throws -> SimulatorService {
+        if let service = simulatorService { return service }
+        let service = try SimulatorService()
+        simulatorService = service
+        return service
     }
 }

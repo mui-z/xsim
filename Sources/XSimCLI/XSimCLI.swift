@@ -23,21 +23,15 @@ public class XSimCLI {
     }
 
     private func registerCommands() {
-        do {
-            // Register all available commands
-            cli.commands = try [
-                ListCommand(),
-                StartCommand(),
-                StopCommand(),
-                ResetCommand(),
-                InstallCommand(),
-                CreateCommand(),
-                DeleteCommand(),
-            ]
-        } catch {
-            // If command initialization fails, show error and exit
-            Term.stderr <<< "エラー: コマンドの初期化に失敗しました - \(error.localizedDescription)".red
-            Foundation.exit(1)
-        }
+        // Register all available commands without heavy initialization
+        cli.commands = [
+            ListCommand(),
+            StartCommand(),
+            StopCommand(),
+            ResetCommand(),
+            InstallCommand(),
+            CreateCommand(),
+            DeleteCommand(),
+        ]
     }
 }
