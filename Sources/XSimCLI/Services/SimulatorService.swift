@@ -6,7 +6,6 @@ class SimulatorService {
     // MARK: - Private Properties
 
     private let xcrunPath: String
-    var resolvedXcrunPath: String { xcrunPath }
 
     // MARK: - Core simctl Execution Utilities
 
@@ -54,10 +53,12 @@ class SimulatorService {
             func append(_ chunk: Data) {
                 lock.lock(); buffer.append(chunk); lock.unlock()
             }
+
             func takeRemaining(from handle: FileHandle) {
                 let rest = handle.readDataToEndOfFile()
                 if !rest.isEmpty { append(rest) }
             }
+
             var data: Data { lock.lock(); defer { lock.unlock() }; return buffer }
             var count: Int { lock.lock(); defer { lock.unlock() }; return buffer.count }
         }
@@ -222,28 +223,6 @@ class SimulatorService {
         }
 
         throw SimulatorError.simctlCommandFailed("xcrun command not found. Please ensure Xcode Command Line Tools are installed.")
-    }
-
-    /// Validates that simctl is available on the system
-    /// - Throws: SimulatorError if simctl is not available
-    private func validateSimctlAvailability() throws {
-        // Test basic simctl availability
-        do {
-            _ = try executeSimctlCommand(arguments: ["help"])
-        } catch let error as SimulatorError {
-            // Re-throw with more context
-            switch error {
-            case let .simctlCommandFailed(message):
-                throw SimulatorError.simctlCommandFailed("simctl validation failed: \(message)")
-            default:
-                throw error
-            }
-        } catch {
-            throw SimulatorError
-                .simctlCommandFailed(
-                    "simctl is not available. Please ensure Xcode is properly installed. Error: \(error.localizedDescription)",
-                )
-        }
     }
 
     /// Finds a simulator device by identifier (name or UUID)
@@ -876,26 +855,6 @@ class SimulatorService {
 
         // Verify deletion
         try verifyDevicesDeleted(uniqueUdids)
-    }
-
-    /// Validates device type and runtime identifiers
-    /// - Parameters:
-    ///   - deviceType: Device type identifier to validate
-    ///   - runtime: Runtime identifier to validate
-    /// - Throws: SimulatorError if validation fails
-    private func validateDeviceTypeAndRuntime(deviceType: String, runtime: String) throws {
-        let availableDeviceTypes = try getAvailableDeviceTypes()
-        let availableRuntimes = try getAvailableRuntimes()
-
-        // Validate device type
-        guard availableDeviceTypes.contains(where: { $0.identifier == deviceType }) else {
-            throw SimulatorError.invalidDeviceType(deviceType)
-        }
-
-        // Validate runtime
-        guard availableRuntimes.contains(where: { $0.identifier == runtime && $0.isAvailable }) else {
-            throw SimulatorError.invalidRuntime(runtime)
-        }
     }
 
     /// Best-effort check that a device has been deleted.
