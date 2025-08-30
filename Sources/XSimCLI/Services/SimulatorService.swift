@@ -459,6 +459,17 @@ class SimulatorService {
     /// - Returns: Array of Runtime objects
     /// - Throws: SimulatorError if the operation fails
     func getAvailableRuntimes() throws -> [Runtime] {
+        // Prefer a fast plain-text parse first to avoid JSON latency/timeouts on some setups.
+        if let plainData = try? executeSimctlCommand(arguments: ["list", "runtimes"], requiresJSON: false, timeoutSeconds: 4),
+           let text = String(data: plainData, encoding: .utf8)
+        {
+            let parsed = parsePlainRuntimesOutput(text)
+            if !parsed.isEmpty {
+                return parsed
+            }
+        }
+
+        // Fallback to JSON (more precise) with a reasonable timeout.
         let data = try executeSimctlCommand(arguments: ["list", "runtimes"], requiresJSON: true, timeoutSeconds: 8)
         let response = try parseJSONOutput(data, as: SimctlRuntimesResponse.self)
 
@@ -470,6 +481,80 @@ class SimulatorService {
                 isAvailable: runtimeData.isAvailable ?? true,
             )
         }
+    }
+
+    /// Parses plain-text output from `simctl list runtimes` into Runtime objects.
+    /// This is a best-effort fast path used when JSON is slow or unavailable.
+    private func parsePlainRuntimesOutput(_ text: String) -> [Runtime] {
+        // Expected lines resemble:
+        //   iOS 17.5 (17.5 - 21F79) - com.apple.CoreSimulator.SimRuntime.iOS-17-5
+        //   tvOS 17.0 (Unavailable) - com.apple.CoreSimulator.SimRuntime.tvOS-17-0
+        //   iOS 15.4 (15.4 - 19E) - com.apple... (unavailable, reason: ...)
+        var runtimes: [Runtime] = []
+
+        for rawLine in text.split(separator: "\n") {
+            let line = rawLine.trimmingCharacters(in: .whitespaces)
+            guard !line.isEmpty else { continue }
+            // Ignore headers or separators
+            if line.hasPrefix("==") || line.lowercased().contains("runtimes") && !line.contains("com.apple.CoreSimulator.SimRuntime") {
+                continue
+            }
+
+            // We rely on the identifier to recognize valid lines
+            guard let idStartRange = line.range(of: " - com.apple.CoreSimulator.SimRuntime") else { continue }
+
+            let leftPart = String(line[..<idStartRange.lowerBound]).trimmingCharacters(in: .whitespaces)
+            let rightPart = String(line[idStartRange.upperBound...]).trimmingCharacters(in: .whitespaces)
+
+            // Right part may include identifier followed by availability note in parentheses
+            // e.g. "\.iOS-17-5 (unavailable, reason: ...)"
+            // Extract identifier as the first token (until space or end)
+            var identifier = rightPart
+            if let spaceIdx = identifier.firstIndex(of: " ") {
+                identifier = String(identifier[..<spaceIdx])
+            }
+
+            // Availability: if the whole line mentions "unavailable" (case-insensitive), mark unavailable
+            let isAvailable = !line.lowercased().contains("unavailable")
+
+            // Name and version
+            // leftPart is like: "iOS 17.5 (17.5 - 21F79)" or "iOS 17.5 (Unavailable)"
+            let name: String = {
+                if let parenIdx = leftPart.firstIndex(of: "(") {
+                    let beforeParen = leftPart[..<parenIdx].trimmingCharacters(in: .whitespaces)
+                    if !beforeParen.isEmpty { return String(beforeParen) }
+                }
+                // Fallback to DisplayFormat from identifier
+                return DisplayFormat.runtimeName(from: identifier)
+            }()
+
+            let version: String = {
+                // First try to read the numeric version inside parentheses
+                if let l = leftPart.firstIndex(of: "("), let r = leftPart.firstIndex(of: ")"), l < r {
+                    let inside = leftPart[leftPart.index(after: l) ..< r]
+                    // inside might be like "17.5 - 21F79" or "Unavailable"
+                    let tokSub = inside.split(separator: " ").first ?? Substring("")
+                    let tok = String(tokSub)
+                    if tok.rangeOfCharacter(from: CharacterSet(charactersIn: "0123456789.").inverted) == nil, !tok.isEmpty {
+                        return tok
+                    }
+                }
+                // Derive from identifier suffix, e.g. iOS-17-5 -> 17.5
+                let comps = identifier.split(separator: ".")
+                if let last = comps.last {
+                    var s = String(last)
+                    for p in ["iOS-", "watchOS-", "tvOS-"] {
+                        s = s.replacingOccurrences(of: p, with: "")
+                    }
+                    return s.replacingOccurrences(of: "-", with: ".")
+                }
+                return ""
+            }()
+
+            runtimes.append(Runtime(identifier: identifier, name: name, version: version, isAvailable: isAvailable))
+        }
+
+        return runtimes
     }
 
     /// Validates that the app bundle path exists and is valid
