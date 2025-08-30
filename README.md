@@ -30,13 +30,6 @@ Commands:
   version         Prints the current version of this app
 ```
 
-Debug logging:
-
-```sh
-# enable verbose debug logs to stderr
-XSIM_VERBOSE=1 xsim list
-```
-
 
 List filters and sorting:
 
@@ -72,4 +65,12 @@ xsim list
 
 # opt-in to truncated, aligned columns (legacy):
 xsim list --truncate
+```
+
+
+Debug logging:
+
+```sh
+# enable verbose debug logs to stderr
+XSIM_VERBOSE=1 xsim list
 ```
