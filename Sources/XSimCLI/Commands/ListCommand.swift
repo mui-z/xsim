@@ -126,7 +126,7 @@ class ListCommand: BaseSimCommand, Command {
             let sortedDevices = devicesForRuntime.sorted { $0.name < $1.name }
             for device in sortedDevices {
                 displayDeviceRow(device, nameWidth: nameW, stateWidth: stateW, typeWidth: typeW)
-        }
+            }
         }
 
         // Display summary
