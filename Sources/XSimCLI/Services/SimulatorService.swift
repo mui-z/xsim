@@ -48,17 +48,31 @@ class SimulatorService {
         process.standardError = errorPipe
 
         // Drain stdout/stderr concurrently to avoid deadlocks on large outputs
-        var stdoutData = Data()
-        var stderrData = Data()
+        final class PipeCollector {
+            private var buffer = Data()
+            private let lock = NSLock()
+            func append(_ chunk: Data) {
+                lock.lock(); buffer.append(chunk); lock.unlock()
+            }
+            func takeRemaining(from handle: FileHandle) {
+                let rest = handle.readDataToEndOfFile()
+                if !rest.isEmpty { append(rest) }
+            }
+            var data: Data { lock.lock(); defer { lock.unlock() }; return buffer }
+            var count: Int { lock.lock(); defer { lock.unlock() }; return buffer.count }
+        }
+
+        let stdoutCollector = PipeCollector()
+        let stderrCollector = PipeCollector()
         let outHandle = outputPipe.fileHandleForReading
         let errHandle = errorPipe.fileHandleForReading
         outHandle.readabilityHandler = { handle in
             let chunk = handle.availableData
-            if !chunk.isEmpty { stdoutData.append(chunk) }
+            if !chunk.isEmpty { stdoutCollector.append(chunk) }
         }
         errHandle.readabilityHandler = { handle in
             let chunk = handle.availableData
-            if !chunk.isEmpty { stderrData.append(chunk) }
+            if !chunk.isEmpty { stderrCollector.append(chunk) }
         }
 
         do {
@@ -84,8 +98,8 @@ class SimulatorService {
             // Stop handlers and read any remaining bytes
             outHandle.readabilityHandler = nil
             errHandle.readabilityHandler = nil
-            stdoutData.append(outHandle.readDataToEndOfFile())
-            stderrData.append(errHandle.readDataToEndOfFile())
+            stdoutCollector.takeRemaining(from: outHandle)
+            stderrCollector.takeRemaining(from: errHandle)
 
             if didTimeout {
                 Env.debug("simctl timed out after \(timeoutSeconds ?? 0)s. args=\(fullArguments.joined(separator: " "))")
@@ -93,8 +107,8 @@ class SimulatorService {
             }
 
             if process.terminationStatus != 0 {
-                let stderrText = String(data: stderrData, encoding: .utf8) ?? ""
-                let stdoutText = String(data: stdoutData, encoding: .utf8) ?? ""
+                let stderrText = String(data: stderrCollector.data, encoding: .utf8) ?? ""
+                let stdoutText = String(data: stdoutCollector.data, encoding: .utf8) ?? ""
 
                 // Many simctl errors print to stdout instead of stderr; prefer stderr, fall back to stdout.
                 let primaryMessage: String = {
@@ -136,11 +150,11 @@ class SimulatorService {
             }
 
             if requiresJSON {
-                let preview = String(data: stdoutData.prefix(200), encoding: .utf8) ?? "<non-utf8>"
-                Env.debug("JSON bytes=\(outputData.count). preview=\(preview)")
+                let preview = String(data: stdoutCollector.data.prefix(200), encoding: .utf8) ?? "<non-utf8>"
+                Env.debug("JSON bytes=\(stdoutCollector.count). preview=\(preview)")
             }
 
-            return stdoutData
+            return stdoutCollector.data
         } catch let error as SimulatorError {
             throw error
         } catch {
