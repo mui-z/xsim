@@ -47,6 +47,20 @@ class SimulatorService {
         process.standardOutput = outputPipe
         process.standardError = errorPipe
 
+        // Drain stdout/stderr concurrently to avoid deadlocks on large outputs
+        var stdoutData = Data()
+        var stderrData = Data()
+        let outHandle = outputPipe.fileHandleForReading
+        let errHandle = errorPipe.fileHandleForReading
+        outHandle.readabilityHandler = { handle in
+            let chunk = handle.availableData
+            if !chunk.isEmpty { stdoutData.append(chunk) }
+        }
+        errHandle.readabilityHandler = { handle in
+            let chunk = handle.availableData
+            if !chunk.isEmpty { stderrData.append(chunk) }
+        }
+
         do {
             try process.run()
 
@@ -67,8 +81,11 @@ class SimulatorService {
                 process.waitUntilExit()
             }
 
-            let outputData = outputPipe.fileHandleForReading.readDataToEndOfFile()
-            let errorData = errorPipe.fileHandleForReading.readDataToEndOfFile()
+            // Stop handlers and read any remaining bytes
+            outHandle.readabilityHandler = nil
+            errHandle.readabilityHandler = nil
+            stdoutData.append(outHandle.readDataToEndOfFile())
+            stderrData.append(errHandle.readDataToEndOfFile())
 
             if didTimeout {
                 Env.debug("simctl timed out after \(timeoutSeconds ?? 0)s. args=\(fullArguments.joined(separator: " "))")
@@ -76,8 +93,8 @@ class SimulatorService {
             }
 
             if process.terminationStatus != 0 {
-                let stderrText = String(data: errorData, encoding: .utf8) ?? ""
-                let stdoutText = String(data: outputData, encoding: .utf8) ?? ""
+                let stderrText = String(data: stderrData, encoding: .utf8) ?? ""
+                let stdoutText = String(data: stdoutData, encoding: .utf8) ?? ""
 
                 // Many simctl errors print to stdout instead of stderr; prefer stderr, fall back to stdout.
                 let primaryMessage: String = {
@@ -119,11 +136,11 @@ class SimulatorService {
             }
 
             if requiresJSON {
-                let preview = String(data: outputData.prefix(200), encoding: .utf8) ?? "<non-utf8>"
+                let preview = String(data: stdoutData.prefix(200), encoding: .utf8) ?? "<non-utf8>"
                 Env.debug("JSON bytes=\(outputData.count). preview=\(preview)")
             }
 
-            return outputData
+            return stdoutData
         } catch let error as SimulatorError {
             throw error
         } catch {
@@ -764,8 +781,11 @@ class SimulatorService {
     /// - Returns: Array of Runtime objects
     /// - Throws: SimulatorError if the operation fails
     func getAvailableRuntimes() throws -> [Runtime] {
+        print("start get ")
         let data = try executeSimctlCommand(arguments: ["list", "runtimes"], requiresJSON: true, timeoutSeconds: 30)
+        print("finish get ")
         let response = try parseJSONOutput(data, as: SimctlRuntimesResponse.self)
+        print("finish parse ")
 
         return response.runtimes.map { runtimeData in
             Runtime(

@@ -127,6 +127,7 @@ class CreateCommand: BaseSimCommand, Command {
     private func displayAvailableRuntimes() throws {
         let simulatorService = try getService()
         let runtimes = try simulatorService.getAvailableRuntimes()
+        print("FINISH get runtimes")
 
         if runtimes.isEmpty {
             stdout <<< "No runtimes found".yellow
