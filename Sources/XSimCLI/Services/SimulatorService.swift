@@ -492,11 +492,14 @@ class SimulatorService {
     /// - Returns: UUID of the created simulator
     /// - Throws: SimulatorError if the operation fails
     func createSimulator(name: String, deviceType: String, runtime: String) throws -> String {
-        // Validate device type and runtime
-        try validateDeviceTypeAndRuntime(deviceType: deviceType, runtime: runtime)
+        // Resolve device type input to an identifier (accepts identifier or friendly name)
+        let resolvedDeviceType = try resolveDeviceTypeIdentifier(from: deviceType)
+
+        // Validate identifiers before create
+        try validateDeviceTypeAndRuntime(deviceType: resolvedDeviceType, runtime: runtime)
 
         // Execute create command
-        let data = try executeSimctlCommand(arguments: ["create", name, deviceType, runtime])
+        let data = try executeSimctlCommand(arguments: ["create", name, resolvedDeviceType, runtime])
 
         // Parse the UUID from the output
         guard let output = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines),
@@ -506,6 +509,49 @@ class SimulatorService {
         }
 
         return output
+    }
+
+    /// Resolves a device type input (identifier or human-readable name) to a device type identifier
+    /// - Parameter from: The user-provided device type string (e.g., identifier or "iPhone 16")
+    /// - Returns: A valid device type identifier
+    /// - Throws: SimulatorError.invalidDeviceType if it cannot be resolved
+    private func resolveDeviceTypeIdentifier(from input: String) throws -> String {
+        let needle = input.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !needle.isEmpty else { throw SimulatorError.invalidDeviceType(input) }
+
+        let types = try getAvailableDeviceTypes()
+
+        // 1) Exact identifier match
+        if types.contains(where: { $0.identifier == needle }) {
+            return needle
+        }
+
+        // Lowercased for case-insensitive comparisons
+        let lower = needle.lowercased()
+
+        // 2) Exact name match (case-insensitive)
+        if let t = types.first(where: { $0.name.lowercased() == lower }) {
+            return t.identifier
+        }
+
+        // 3) Display name match (case-insensitive)
+        if let t = types.first(where: { $0.displayName.lowercased() == lower }) {
+            return t.identifier
+        }
+
+        // 4) Hyphen/space normalization: e.g., "iPhone-16" -> "iPhone 16"
+        let normalized = lower.replacingOccurrences(of: "-", with: " ").replacingOccurrences(of: "  ", with: " ")
+        if let t = types.first(where: { $0.name.lowercased() == normalized || $0.displayName.lowercased() == normalized }) {
+            return t.identifier
+        }
+
+        // 5) Prefix match as a last resort (choose the most recent model name)
+        let prefixCandidates = types.filter { $0.name.lowercased().hasPrefix(lower) || $0.displayName.lowercased().hasPrefix(lower) }
+        if let t = prefixCandidates.sorted(by: { $0.name.count > $1.name.count }).first {
+            return t.identifier
+        }
+
+        throw SimulatorError.invalidDeviceType(input)
     }
 
     /// Gets available device types
