@@ -13,7 +13,6 @@ class ListCommand: BaseSimCommand, Command {
       xsim list                    # show all devices
       xsim list --running          # only running devices
       xsim list --available        # only available devices
-      xsim list --resolve-names    # resolve runtime/type names via JSON
     """
 
     @Flag("-r", "--running", description: "Show only running simulators")
@@ -21,9 +20,6 @@ class ListCommand: BaseSimCommand, Command {
 
     @Flag("-a", "--available", description: "Show only available simulators")
     var showAvailableOnly: Bool
-
-    @Flag("--resolve-names", description: "Resolve runtime/device type names via JSON (extra simctl calls)")
-    var resolveNames: Bool
 
     @Key("--runtime", description: "Filter by runtime (e.g. 'iOS 17', '17.0' or a runtime identifier)")
     var runtimeFilter: String?
@@ -40,22 +36,6 @@ class ListCommand: BaseSimCommand, Command {
         do {
             let simulatorService = try getService()
             let devices = try simulatorService.listDevices()
-
-            // Optionally build display-name maps using simctl's JSON outputs
-            var runtimeNameById: [String: String] = [:]
-            var deviceTypeNameById: [String: String] = [:]
-            if resolveNames {
-                do {
-                    let runtimes = try simulatorService.getAvailableRuntimes()
-                    runtimeNameById = Dictionary(uniqueKeysWithValues: runtimes.map { ($0.identifier, $0.displayName) })
-                    let types = try simulatorService.getAvailableDeviceTypes()
-                    deviceTypeNameById = Dictionary(uniqueKeysWithValues: types.map { ($0.identifier, $0.displayName) })
-                } catch {
-                    // Fallback to heuristic parsing if lookup fails
-                    runtimeNameById = [:]
-                    deviceTypeNameById = [:]
-                }
-            }
 
             // Debug
             Env.debug("Total devices fetched: \(devices.count). runningOnly=\(showRunningOnly), availableOnly=\(showAvailableOnly)")
@@ -82,7 +62,7 @@ class ListCommand: BaseSimCommand, Command {
                 return
             }
 
-            displayDevices(filteredDevices, runtimeNameById: runtimeNameById, deviceTypeNameById: deviceTypeNameById)
+            displayDevices(filteredDevices)
 
         } catch let error as SimulatorError {
             throw CLI.Error(message: error.localizedDescription)
@@ -121,10 +101,10 @@ class ListCommand: BaseSimCommand, Command {
     }
 
     /// Displays devices in a formatted table
-    private func displayDevices(_ devices: [SimulatorDevice], runtimeNameById: [String: String], deviceTypeNameById: [String: String]) {
+    private func displayDevices(_ devices: [SimulatorDevice]) {
         // Group devices by runtime for better organization
         let groupedDevices = Dictionary(grouping: devices) { device in
-            runtimeNameById[device.runtimeIdentifier] ?? DisplayFormat.runtimeName(from: device.runtimeIdentifier)
+            DisplayFormat.runtimeName(from: device.runtimeIdentifier)
         }
 
         let sortedRuntimes = sortRuntimeKeys(Array(groupedDevices.keys), grouped: groupedDevices)
@@ -137,7 +117,7 @@ class ListCommand: BaseSimCommand, Command {
             stdout <<< "== \(runtime) ==".bold.blue
 
             // Compute dynamic column widths for this runtime group
-            let (nameW, stateW, typeW) = computeColumnWidths(devicesForRuntime, deviceTypeNameById: deviceTypeNameById)
+            let (nameW, stateW, typeW) = computeColumnWidths(devicesForRuntime)
 
             // Display table header
             displayTableHeader(nameWidth: nameW, stateWidth: stateW, typeWidth: typeW)
@@ -145,8 +125,8 @@ class ListCommand: BaseSimCommand, Command {
             // Display devices for this runtime
             let sortedDevices = devicesForRuntime.sorted { $0.name < $1.name }
             for device in sortedDevices {
-                displayDeviceRow(device, deviceTypeNameById: deviceTypeNameById, nameWidth: nameW, stateWidth: stateW, typeWidth: typeW)
-            }
+                displayDeviceRow(device, nameWidth: nameW, stateWidth: stateW, typeWidth: typeW)
+        }
         }
 
         // Display summary
@@ -223,9 +203,8 @@ class ListCommand: BaseSimCommand, Command {
     }
 
     /// Displays a single device row
-    private func displayDeviceRow(_ device: SimulatorDevice, deviceTypeNameById: [String: String], nameWidth: Int, stateWidth: Int, typeWidth: Int) {
-        let resolvedTypeName = deviceTypeNameById[device.deviceTypeIdentifier] ?? DisplayFormat
-            .deviceTypeName(from: device.deviceTypeIdentifier)
+    private func displayDeviceRow(_ device: SimulatorDevice, nameWidth: Int, stateWidth: Int, typeWidth: Int) {
+        let resolvedTypeName = DisplayFormat.deviceTypeName(from: device.deviceTypeIdentifier)
 
         if truncate {
             let stateDisplay = DisplayFormat.coloredState(device.state, isAvailable: device.isAvailable)
@@ -249,7 +228,7 @@ class ListCommand: BaseSimCommand, Command {
     }
 
     /// Computes dynamic column widths for a group of devices
-    private func computeColumnWidths(_ devices: [SimulatorDevice], deviceTypeNameById: [String: String]) -> (Int, Int, Int) {
+    private func computeColumnWidths(_ devices: [SimulatorDevice]) -> (Int, Int, Int) {
         var nameW = max(4, 0) // "Name"
         var stateW = max(5, 0) // "State"
         var typeW = max(11, 0) // "Device Type"
@@ -262,7 +241,7 @@ class ListCommand: BaseSimCommand, Command {
             nameW = max(nameW, d.name.count)
             let statePlain = d.isAvailable ? d.state.displayName : "Unavailable"
             stateW = max(stateW, statePlain.count)
-            let typeName = deviceTypeNameById[d.deviceTypeIdentifier] ?? DisplayFormat.deviceTypeName(from: d.deviceTypeIdentifier)
+            let typeName = DisplayFormat.deviceTypeName(from: d.deviceTypeIdentifier)
             typeW = max(typeW, typeName.count)
         }
 
