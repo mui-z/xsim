@@ -623,7 +623,7 @@ class SimulatorService {
 
         // 4) Version-only: pick runtimes whose version equals or starts with the input
         let versionToken: String? = {
-            let comps = lower.split(whereSeparator: { !("0"..."9").contains($0) && $0 != "." })
+            let comps = lower.split(whereSeparator: { !("0" ... "9").contains($0) && $0 != "." })
             // Find first numeric-ish component
             return comps.first.map(String.init)
         }()

@@ -14,7 +14,6 @@ Commands:
   list            List available simulators
   start           Start a simulator
   stop            Stop simulators
-  reset           Reset a simulator
   install         Install an app to a simulator
   create          Create a new simulator
   delete          Delete a simulator
@@ -66,4 +65,3 @@ xsim list
 # opt-in to truncated, aligned columns (legacy):
 xsim list --truncate
 ```
-

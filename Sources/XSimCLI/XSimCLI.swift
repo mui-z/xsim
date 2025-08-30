@@ -30,7 +30,6 @@ public class XSimCLI {
             ListCommand(),
             StartCommand(),
             StopCommand(),
-            ResetCommand(),
             InstallCommand(),
             CreateCommand(),
             DeleteCommand(),
