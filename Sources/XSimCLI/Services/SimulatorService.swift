@@ -287,6 +287,64 @@ class SimulatorService {
         try verifyDeviceStarted(device.udid)
     }
 
+    /// Starts a simulator, allowing disambiguation by runtime when specifying by name
+    /// - Parameters:
+    ///   - identifier: Device name or UUID
+    ///   - runtimeFilter: Optional runtime filter (e.g. "iOS 17", "17.0", or a runtime identifier)
+    func startSimulator(identifier: String, runtimeFilter: String?) throws {
+        // If no filter provided, defer to existing implementation
+        guard let rf = runtimeFilter?.trimmingCharacters(in: .whitespacesAndNewlines), !rf.isEmpty else {
+            try startSimulator(identifier: identifier)
+            return
+        }
+
+        // If identifier is a UUID, ignore runtime filter and just start it (with the same validations)
+        do {
+            let uuidRegex = try NSRegularExpression(pattern: "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$")
+            let range = NSRange(location: 0, length: identifier.utf16.count)
+            if uuidRegex.firstMatch(in: identifier, options: [], range: range) != nil {
+                try startSimulator(identifier: identifier)
+                return
+            }
+        } catch {
+            // If regex fails for any reason, we simply proceed with name-based selection
+        }
+
+        // Name-based selection with runtime disambiguation
+        let devices = try listDevices()
+        let candidates = devices.filter { $0.name == identifier }
+            .filter { Filters.runtimeMatches(filter: rf, runtimeIdentifier: $0.runtimeIdentifier) }
+
+        guard !candidates.isEmpty else {
+            throw SimulatorError.deviceNotFound(identifier)
+        }
+
+        // If multiple candidates match, pick the newest runtime by version
+        let selected = candidates.max(by: { versionInts(from: $0.runtimeIdentifier) < versionInts(from: $1.runtimeIdentifier) })!
+
+        // Validations similar to startSimulator(identifier:)
+        if selected.state.isRunning {
+            throw SimulatorError.deviceAlreadyRunning(identifier)
+        }
+        guard selected.isAvailable else {
+            throw SimulatorError.deviceNotFound(identifier)
+        }
+
+        _ = try executeSimctlCommand(arguments: ["boot", selected.udid])
+        try verifyDeviceStarted(selected.udid)
+    }
+
+    private func versionInts(from identifier: String) -> [Int] {
+        let parts = identifier.split(separator: ".")
+        guard let last = parts.last else { return [] }
+        var s = String(last)
+        for p in ["iOS-", "watchOS-", "tvOS-"] {
+            s = s.replacingOccurrences(of: p, with: "")
+        }
+        let dot = s.replacingOccurrences(of: "-", with: ".")
+        return dot.split(separator: ".").compactMap { Int($0) }
+    }
+
     /// Stops a simulator device or all running devices
     /// - Parameter identifier: The device name or UUID to stop. If nil, stops all running devices
     /// - Throws: SimulatorError if the operation fails

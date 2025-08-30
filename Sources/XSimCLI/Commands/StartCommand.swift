@@ -12,9 +12,13 @@ class StartCommand: BaseSimCommand, Command {
     Examples:
       xsim start "iPhone 15"                    # by name
       xsim start 12345678-1234-1234-1234-123456789012  # by UUID
+      xsim start "iPhone 15" --runtime iOS 17     # disambiguate by runtime
     """
 
     @Param var deviceIdentifier: String
+
+    @Key("--runtime", description: "Filter by runtime when selecting by name (e.g. 'iOS 17', '17.0' or a runtime identifier)")
+    var runtimeFilter: String?
 
     override init() {}
 
@@ -24,7 +28,7 @@ class StartCommand: BaseSimCommand, Command {
 
             // Start the simulator
             let simulatorService = try getService()
-            try simulatorService.startSimulator(identifier: deviceIdentifier)
+            try simulatorService.startSimulator(identifier: deviceIdentifier, runtimeFilter: runtimeFilter)
 
             // Get device info for confirmation
             let devices = try simulatorService.listDevices()
