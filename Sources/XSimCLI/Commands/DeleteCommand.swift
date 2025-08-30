@@ -15,7 +15,7 @@ class DeleteCommand: BaseSimCommand, Command {
     Examples:
       xsim delete "iPhone 15"                  # by name
       xsim delete 12345678-1234-1234-1234-123456789012  # by UUID
-      xsim delete --runtime "iOS 17.0"         # all iOS 17.0 simulators
+      xsim delete --runtime "iOS 26.0"         # all iOS 26.0 simulators
       xsim delete --runtime com.apple.CoreSimulator.SimRuntime.iOS-17-0
     """
 
@@ -26,7 +26,7 @@ class DeleteCommand: BaseSimCommand, Command {
 
     @Key(
         "--runtime",
-        description: "Delete all simulators for the specified runtime (e.g. 'iOS 17.0' or 'com.apple.CoreSimulator.SimRuntime.iOS-17-0')",
+        description: "Delete all simulators for the specified runtime (e.g. 'iOS 26.0' or 'com.apple.CoreSimulator.SimRuntime.iOS-17-0')",
     )
     var runtimeFilter: String?
 
@@ -66,7 +66,7 @@ class DeleteCommand: BaseSimCommand, Command {
                 stdout <<< ""
                 stdout <<< "Usage:".bold
                 stdout <<< "  xsim delete <device>                # by name or UUID"
-                stdout <<< "  xsim delete --runtime 'iOS 17.0'    # delete all for a runtime"
+                stdout <<< "  xsim delete --runtime 'iOS 26.0'    # delete all for a runtime"
                 stdout <<< "  xsim delete --runtime com.apple.CoreSimulator.SimRuntime.iOS-17-0".dim
                 throw CLI.Error(message: "")
             }

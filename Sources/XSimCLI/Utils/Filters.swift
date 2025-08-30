@@ -2,7 +2,7 @@ import Foundation
 
 enum Filters {
     /// Flexible runtime matching used in multiple commands.
-    /// Accepts full identifier, display form (e.g., "iOS 17.0"), prefix like "iOS 17",
+    /// Accepts full identifier, display form (e.g., "iOS 26.0"), prefix like "iOS 17",
     /// or version-only like "17" / "17.0".
     static func runtimeMatches(filter: String, runtimeIdentifier: String) -> Bool {
         let filterLower = filter.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()

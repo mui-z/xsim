@@ -572,7 +572,7 @@ class SimulatorService {
     }
 
     /// Resolves a runtime input (identifier or human-friendly) to a runtime identifier.
-    /// Accepts examples like: "com.apple.CoreSimulator.SimRuntime.iOS-17-0", "iOS 17", "iOS 17.0", "17", "17.0".
+    /// Accepts examples like: "com.apple.CoreSimulator.SimRuntime.iOS-17-0", "iOS 17", "iOS 26.0", "17", "17.0".
     /// If a device type identifier is provided, prefer runtimes matching that platform.
     private func resolveRuntimeIdentifier(from input: String, forDeviceTypeIdentifier deviceTypeId: String?) throws -> String {
         let needle = input.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -646,7 +646,7 @@ class SimulatorService {
     /// - Throws: SimulatorError if the operation fails
     func getAvailableDeviceTypes() throws -> [DeviceType] {
         // Fast path: parse plain-text which is typically quicker and reliable.
-        if let plainData = try? executeSimctlCommand(arguments: ["list", "devicetypes"], requiresJSON: false, timeoutSeconds: 4),
+        if let plainData = try? executeSimctlCommand(arguments: ["list", "devicetypes"], requiresJSON: false, timeoutSeconds: 10),
            let text = String(data: plainData, encoding: .utf8)
         {
             let parsed = parsePlainDeviceTypesOutput(text)
@@ -656,7 +656,7 @@ class SimulatorService {
         }
 
         // Fallback to JSON for precision if plain parse returns nothing.
-        let data = try executeSimctlCommand(arguments: ["list", "devicetypes"], requiresJSON: true, timeoutSeconds: 8)
+        let data = try executeSimctlCommand(arguments: ["list", "devicetypes"], requiresJSON: true, timeoutSeconds: 30)
         let response = try parseJSONOutput(data, as: SimctlDeviceTypesResponse.self)
 
         return response.devicetypes.map { deviceTypeData in
@@ -710,7 +710,7 @@ class SimulatorService {
     /// - Returns: Array of Runtime objects
     /// - Throws: SimulatorError if the operation fails
     func getAvailableRuntimes() throws -> [Runtime] {
-        let data = try executeSimctlCommand(arguments: ["list", "runtimes"], requiresJSON: true, timeoutSeconds: 8)
+        let data = try executeSimctlCommand(arguments: ["list", "runtimes"], requiresJSON: true, timeoutSeconds: 30)
         let response = try parseJSONOutput(data, as: SimctlRuntimesResponse.self)
 
         return response.runtimes.map { runtimeData in
