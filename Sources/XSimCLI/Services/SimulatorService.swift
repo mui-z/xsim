@@ -736,16 +736,16 @@ class SimulatorService {
                 continue
             }
 
-            // We rely on the identifier to recognize valid lines
-            guard let idStartRange = line.range(of: " - com.apple.CoreSimulator.SimRuntime") else { continue }
+            // Find the full runtime identifier starting from the known prefix
+            let idPrefix = "com.apple.CoreSimulator.SimRuntime"
+            guard let idPrefixRange = line.range(of: idPrefix) else { continue }
 
-            let leftPart = String(line[..<idStartRange.lowerBound]).trimmingCharacters(in: .whitespaces)
-            let rightPart = String(line[idStartRange.upperBound...]).trimmingCharacters(in: .whitespaces)
-
-            // Right part may include identifier followed by availability note in parentheses
-            // e.g. "\.iOS-17-5 (unavailable, reason: ...)"
-            // Extract identifier as the first token (until space or end)
-            var identifier = rightPart
+            let leftPart = String(line[..<idPrefixRange.lowerBound]).trimmingCharacters(in: .whitespaces)
+            var identifier = String(line[idPrefixRange.lowerBound...])
+            // Trim any trailing note like " (unavailable, reason: ...)"
+            if let parenIdx = identifier.firstIndex(of: "(") {
+                identifier = String(identifier[..<parenIdx]).trimmingCharacters(in: .whitespaces)
+            }
             if let spaceIdx = identifier.firstIndex(of: " ") {
                 identifier = String(identifier[..<spaceIdx])
             }
