@@ -360,19 +360,34 @@ class SimulatorService {
     /// - Throws: SimulatorError if the operation fails
     func stopSimulator(identifier: String? = nil) throws {
         if let identifier {
-            // Stop specific device
-            let device = try findDevice(by: identifier)
+            // Stop specific device; if multiple devices have the same name, prefer a running one.
+            let devices = try listDevices()
+
+            // If it's a UUID, pick by UDID directly
+            if let targetByUUID = devices.first(where: { $0.udid == identifier }) {
+                if !targetByUUID.state.isRunning { throw SimulatorError.deviceNotRunning(identifier) }
+                _ = try executeSimctlCommand(arguments: ["shutdown", targetByUUID.udid])
+                try verifyDeviceStopped(targetByUUID.udid)
+                return
+            }
+
+            // Name-based selection
+            let nameMatches = devices.filter { $0.name == identifier }
+            guard !nameMatches.isEmpty else { throw SimulatorError.deviceNotFound(identifier) }
+
+            // Prefer a running device among same-name candidates
+            let selected = nameMatches.first(where: { $0.state.isRunning }) ?? nameMatches.first!
 
             // Check if device is already stopped
-            if !device.state.isRunning {
+            if !selected.state.isRunning {
                 throw SimulatorError.deviceNotRunning(identifier)
             }
 
             // Execute shutdown command
-            _ = try executeSimctlCommand(arguments: ["shutdown", device.udid])
+            _ = try executeSimctlCommand(arguments: ["shutdown", selected.udid])
 
             // Verify the device stopped successfully
-            try verifyDeviceStopped(device.udid)
+            try verifyDeviceStopped(selected.udid)
         } else {
             // Stop all running devices
             _ = try executeSimctlCommand(arguments: ["shutdown", "all"])
