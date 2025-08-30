@@ -49,10 +49,17 @@ class StartCommand: BaseSimCommand, Command {
     private func handleSimulatorError(_ error: SimulatorError) throws {
         switch error {
         case let .deviceNotFound(identifier):
-            stdout <<< "✗ Device '\(identifier)' not found".red
-            stdout <<< ""
-            stdout <<< "To list available devices:".dim
-            stdout <<< "  xsim list".cyan
+            if let rf = runtimeFilter?.trimmingCharacters(in: .whitespacesAndNewlines), !rf.isEmpty {
+                stdout <<< "✗ Device '\(identifier)' not found for runtime '\(rf)'".red
+                stdout <<< ""
+                stdout <<< "Try filtering by runtime:".dim
+                stdout <<< "  xsim list --runtime \"\(rf)\" --name-contains \"\(identifier)\"".cyan
+            } else {
+                stdout <<< "✗ Device '\(identifier)' not found".red
+                stdout <<< ""
+                stdout <<< "To list available devices:".dim
+                stdout <<< "  xsim list".cyan
+            }
             throw CLI.Error(message: "")
 
         case let .deviceAlreadyRunning(identifier):
