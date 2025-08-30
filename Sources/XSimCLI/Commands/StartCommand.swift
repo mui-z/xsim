@@ -10,9 +10,9 @@ class StartCommand: BaseSimCommand, Command {
     You can specify the device by name or UUID.
 
     Examples:
-      xsim start "iPhone 15"                    # by name
+      xsim start "iPhone 16"                    # by name
       xsim start 12345678-1234-1234-1234-123456789012  # by UUID
-      xsim start "iPhone 15" --runtime iOS 17     # disambiguate by runtime
+      xsim start "iPhone 16" --runtime "iOS 26"   # disambiguate by runtime
     """
 
     @Param var deviceIdentifier: String

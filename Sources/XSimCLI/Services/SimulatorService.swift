@@ -320,7 +320,7 @@ class SimulatorService {
         }
 
         // If multiple candidates match, pick the newest runtime by version
-        let selected = candidates.max(by: { versionInts(from: $0.runtimeIdentifier) < versionInts(from: $1.runtimeIdentifier) })!
+        let selected = candidates.max(by: { versionLess(versionInts(from: $0.runtimeIdentifier), versionInts(from: $1.runtimeIdentifier)) })!
 
         // Validations similar to startSimulator(identifier:)
         if selected.state.isRunning {
@@ -343,6 +343,16 @@ class SimulatorService {
         }
         let dot = s.replacingOccurrences(of: "-", with: ".")
         return dot.split(separator: ".").compactMap { Int($0) }
+    }
+
+    private func versionLess(_ a: [Int], _ b: [Int]) -> Bool {
+        let n = max(a.count, b.count)
+        for i in 0 ..< n {
+            let ai = i < a.count ? a[i] : 0
+            let bi = i < b.count ? b[i] : 0
+            if ai != bi { return ai < bi }
+        }
+        return false
     }
 
     /// Stops a simulator device or all running devices
