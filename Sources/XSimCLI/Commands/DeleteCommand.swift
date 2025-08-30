@@ -57,7 +57,8 @@ class DeleteCommand: BaseSimCommand, Command {
 
                 stdout <<< "Deleting simulator...".dim
 
-                try simulatorService.deleteSimulator(identifier: identifier)
+                // 安全のため、確認時に表示したデバイスのUDIDで確実に削除する
+                try simulatorService.deleteSimulator(identifier: device.udid)
                 displayDeleteSuccess(device: device)
             } else {
                 // No identifier or runtime specified
