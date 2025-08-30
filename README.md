@@ -1,5 +1,4 @@
 # XSim
-# 🚧🚧Not working properly🚧🚧
 
 simple xcrun simctl wrapper.
 
@@ -43,9 +42,9 @@ List filters and sorting:
 
 ```sh
 # filter by runtime (flexible):
-xsim list --runtime "iOS 17"
-xsim list --runtime "17.0"
-xsim list --runtime com.apple.CoreSimulator.SimRuntime.iOS-17-0
+xsim list --runtime "iOS 26"
+xsim list --runtime "26.0"
+xsim list --runtime com.apple.CoreSimulator.SimRuntime.iOS-26-0
 
 # runtimes are grouped and sorted by platform (iOS, watchOS, tvOS) and version (desc)
 ```
@@ -55,9 +54,9 @@ List filters and sorting:
 
 ```sh
 # filter by runtime (flexible)
-xsim list --runtime "iOS 17"
-xsim list --runtime "17.0"
-xsim list --runtime com.apple.CoreSimulator.SimRuntime.iOS-17-0
+xsim list --runtime "iOS 26"
+xsim list --runtime "26.0"
+xsim list --runtime com.apple.CoreSimulator.SimRuntime.iOS-26-0
 
 # filter by device name substring (case-insensitive)
 xsim list --name-contains "iPhone"
