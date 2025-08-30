@@ -24,7 +24,6 @@ Commands:
   list            List available simulators
   start           Start a simulator
   stop            Stop simulators
-  install         Install an app to a simulator
   create          Create a new simulator
   delete          Delete a simulator
   doctor          Check environment and simctl support
