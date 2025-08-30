@@ -2,7 +2,7 @@ import Rainbow
 import SwiftCLI
 
 /// Command to stop simulator devices
-class StopCommand: Command {
+class StopCommand: BaseSimCommand, Command {
     let name = "stop"
     let shortDescription = "Stop simulators"
     let longDescription = """
@@ -17,9 +17,7 @@ class StopCommand: Command {
 
     @Param var deviceIdentifier: String?
 
-    private var simulatorService: SimulatorService?
-
-    init() {}
+    override init() {}
 
     func execute() throws {
         do {
@@ -45,7 +43,7 @@ class StopCommand: Command {
         // Get device info before stopping
         let simulatorService = try getService()
         let devices = try simulatorService.listDevices()
-        guard let device = findDevice(devices: devices, identifier: identifier) else {
+        guard let device = findDevice(in: devices, identifier: identifier) else {
             throw SimulatorError.deviceNotFound(identifier)
         }
 
@@ -92,7 +90,7 @@ class StopCommand: Command {
             do {
                 let simulatorService = try getService()
                 let devices = try simulatorService.listDevices()
-                if let device = findDevice(devices: devices, identifier: identifier) {
+                if let device = findDevice(in: devices, identifier: identifier) {
                     displayDeviceStatus(device: device)
                 }
             } catch {
@@ -109,8 +107,8 @@ class StopCommand: Command {
         stdout <<< "✓ Stopped the simulator".green
         stdout <<< ""
 
-        let deviceTypeName = extractDeviceTypeName(from: device.deviceTypeIdentifier)
-        let runtimeName = extractRuntimeDisplayName(from: device.runtimeIdentifier)
+        let deviceTypeName = DisplayFormat.deviceTypeName(from: device.deviceTypeIdentifier)
+        let runtimeName = DisplayFormat.runtimeName(from: device.runtimeIdentifier)
 
         stdout <<< "Device Information:".bold
         stdout <<< "  Name: \(device.name)".dim
@@ -126,7 +124,7 @@ class StopCommand: Command {
 
         stdout <<< "Stopped devices (\(stoppedDevices.count)):".bold
         for device in stoppedDevices.sorted(by: { $0.name < $1.name }) {
-            let deviceTypeName = extractDeviceTypeName(from: device.deviceTypeIdentifier)
+            let deviceTypeName = DisplayFormat.deviceTypeName(from: device.deviceTypeIdentifier)
             stdout <<< "  • \(device.name) (\(deviceTypeName))".dim
         }
 
@@ -139,73 +137,7 @@ class StopCommand: Command {
         stdout <<< ""
         stdout <<< "Current Status:".dim
         stdout <<< "  Name: \(device.name)"
-        stdout <<< "  State: \(formatDeviceState(device.state))"
+        stdout <<< "  State: \(DisplayFormat.coloredState(device.state))"
         stdout <<< "  UUID: \(device.udid)".dim
-    }
-
-    /// Finds a device by identifier (name or UUID)
-    private func findDevice(devices: [SimulatorDevice], identifier: String) -> SimulatorDevice? {
-        // First try to find by UUID
-        if let device = devices.first(where: { $0.udid == identifier }) {
-            return device
-        }
-
-        // Then try to find by name
-        return devices.first(where: { $0.name == identifier })
-    }
-
-    /// Formats the device state with appropriate colors
-    private func formatDeviceState(_ state: SimulatorState) -> String {
-        switch state {
-        case .booted:
-            "Booted".green
-        case .booting:
-            "Booting".yellow
-        case .shutdown:
-            "Shutdown".dim
-        case .shuttingDown:
-            "Shutting down".yellow
-        }
-    }
-
-    /// Extracts a display-friendly runtime name from the runtime identifier
-    private func extractRuntimeDisplayName(from identifier: String) -> String {
-        let components = identifier.components(separatedBy: ".")
-        guard let lastComponent = components.last else {
-            return identifier
-        }
-
-        if lastComponent.hasPrefix("iOS-") {
-            let version = lastComponent.replacingOccurrences(of: "iOS-", with: "").replacingOccurrences(of: "-", with: ".")
-            return "iOS \(version)"
-        } else if lastComponent.hasPrefix("watchOS-") {
-            let version = lastComponent.replacingOccurrences(of: "watchOS-", with: "").replacingOccurrences(of: "-", with: ".")
-            return "watchOS \(version)"
-        } else if lastComponent.hasPrefix("tvOS-") {
-            let version = lastComponent.replacingOccurrences(of: "tvOS-", with: "").replacingOccurrences(of: "-", with: ".")
-            return "tvOS \(version)"
-        }
-
-        return lastComponent
-    }
-
-    /// Extracts a display-friendly device type name from the device type identifier
-    private func extractDeviceTypeName(from identifier: String) -> String {
-        let components = identifier.components(separatedBy: ".")
-        guard let lastComponent = components.last else {
-            return identifier
-        }
-
-        return lastComponent.replacingOccurrences(of: "-", with: " ")
-    }
-}
-
-// Lazy service accessor
-extension StopCommand {
-    private func getService() throws -> SimulatorService {
-        if let service = simulatorService { return service }
-        let service = try SimulatorService()
-        simulatorService = service
-        return service
     }
 }

@@ -10,9 +10,11 @@ public class XSimCLI {
         Rainbow.enabled = true
 
         // Initialize CLI with basic configuration
-        cli = CLI(name: "xsim",
-                  version: "1.0.0",
-                  description: "Xcode Simulator management tool – shortcuts for simctl commands")
+        cli = CLI(
+            name: "xsim",
+            version: "1.0.0",
+            description: "Xcode Simulator management tool – shortcuts for simctl commands"
+        )
 
         // Register all commands
         registerCommands()
@@ -32,6 +34,7 @@ public class XSimCLI {
             InstallCommand(),
             CreateCommand(),
             DeleteCommand(),
+            DoctorCommand(),
         ]
     }
 }

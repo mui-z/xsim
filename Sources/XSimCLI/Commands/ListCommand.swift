@@ -2,7 +2,7 @@ import Rainbow
 import SwiftCLI
 
 /// Command to list available simulator devices
-class ListCommand: Command {
+class ListCommand: BaseSimCommand, Command {
     let name = "list"
     let shortDescription = "List available simulators"
     let longDescription = """
@@ -25,9 +25,13 @@ class ListCommand: Command {
     @Flag("--resolve-names", description: "Resolve runtime/device type names via JSON (extra simctl calls)")
     var resolveNames: Bool
 
-    private var simulatorService: SimulatorService?
+    @Key("--runtime", description: "Filter by runtime (e.g. 'iOS 17', '17.0' or a runtime identifier)")
+    var runtimeFilter: String?
 
-    init() {}
+    @Key("--name-contains", description: "Filter by device name substring (case-insensitive)")
+    var nameContains: String?
+
+    override init() {}
 
     func execute() throws {
         do {
@@ -50,15 +54,27 @@ class ListCommand: Command {
                 }
             }
 
-            // Debug: Print counts before filtering
-            print("Debug: Total devices fetched: \(devices.count). runningOnly=\(showRunningOnly), availableOnly=\(showAvailableOnly)")
+            // Debug
+            Env.debug("Total devices fetched: \(devices.count). runningOnly=\(showRunningOnly), availableOnly=\(showAvailableOnly)")
 
-            // Filter devices based on flags
+            // Filter devices based on flags and runtime filter
             let filteredDevices = filterDevices(devices)
+                .filter { device in
+                    if let rf = runtimeFilter, !rf.isEmpty {
+                        return Filters.runtimeMatches(filter: rf, runtimeIdentifier: device.runtimeIdentifier)
+                    }
+                    return true
+                }
+                .filter { device in
+                    if let q = nameContains, !q.isEmpty {
+                        return device.name.range(of: q, options: [.caseInsensitive, .diacriticInsensitive]) != nil
+                    }
+                    return true
+                }
 
             if filteredDevices.isEmpty {
-                // Debug: No devices after filtering
-                print("Debug: No devices after filtering. Original=\(devices.count)")
+                // Debug
+                Env.debug("No devices after filtering. Original=\(devices.count)")
                 displayNoDevicesMessage()
                 return
             }
@@ -70,14 +86,6 @@ class ListCommand: Command {
         } catch {
             throw CLI.Error(message: "An unexpected error occurred: \(error.localizedDescription)")
         }
-    }
-
-    /// Lazily creates the SimulatorService on first use
-    private func getService() throws -> SimulatorService {
-        if let service = simulatorService { return service }
-        let service = try SimulatorService()
-        simulatorService = service
-        return service
     }
 
     /// Filters devices based on command flags
@@ -113,10 +121,10 @@ class ListCommand: Command {
     private func displayDevices(_ devices: [SimulatorDevice], runtimeNameById: [String: String], deviceTypeNameById: [String: String]) {
         // Group devices by runtime for better organization
         let groupedDevices = Dictionary(grouping: devices) { device in
-            runtimeNameById[device.runtimeIdentifier] ?? extractRuntimeDisplayName(from: device.runtimeIdentifier)
+            runtimeNameById[device.runtimeIdentifier] ?? DisplayFormat.runtimeName(from: device.runtimeIdentifier)
         }
 
-        let sortedRuntimes = groupedDevices.keys.sorted()
+        let sortedRuntimes = sortRuntimeKeys(Array(groupedDevices.keys), grouped: groupedDevices)
 
         for runtime in sortedRuntimes {
             guard let devicesForRuntime = groupedDevices[runtime] else { continue }
@@ -139,12 +147,61 @@ class ListCommand: Command {
         displaySummary(devices)
     }
 
+    /// Sort runtime headers: iOS -> watchOS -> tvOS -> other, version desc
+    private func sortRuntimeKeys(_ keys: [String], grouped: [String: [SimulatorDevice]]) -> [String] {
+        func platformOrder(_ identifier: String) -> Int {
+            if identifier.contains(".SimRuntime.iOS-") { return 0 }
+            if identifier.contains(".SimRuntime.watchOS-") { return 1 }
+            if identifier.contains(".SimRuntime.tvOS-") { return 2 }
+            return 3
+        }
+
+        func versionInts(from identifier: String) -> [Int] {
+            // last component like iOS-17-0 / watchOS-10-2
+            let parts = identifier.split(separator: ".")
+            guard let last = parts.last else { return [] }
+            var s = String(last)
+            for p in ["iOS-", "watchOS-", "tvOS-"] {
+                s = s.replacingOccurrences(of: p, with: "")
+            }
+            let dot = s.replacingOccurrences(of: "-", with: ".")
+            return dot.split(separator: ".").compactMap { Int($0) }
+        }
+
+        func compareVersionsDesc(_ a: [Int], _ b: [Int]) -> Bool {
+            let n = max(a.count, b.count)
+            for i in 0 ..< n {
+                let ai = i < a.count ? a[i] : 0
+                let bi = i < b.count ? b[i] : 0
+                if ai != bi { return ai > bi }
+            }
+            return false
+        }
+
+        return keys.sorted { lhs, rhs in
+            guard
+                let lId = grouped[lhs]?.first?.runtimeIdentifier,
+                let rId = grouped[rhs]?.first?.runtimeIdentifier
+            else { return lhs < rhs }
+
+            let lp = platformOrder(lId)
+            let rp = platformOrder(rId)
+            if lp != rp { return lp < rp }
+
+            let lv = versionInts(from: lId)
+            let rv = versionInts(from: rId)
+            if lv != rv { return compareVersionsDesc(lv, rv) }
+
+            return lhs < rhs
+        }
+    }
+
     /// Displays the table header
     private func displayTableHeader() {
         let header =
-            pad(truncateString("Name", maxLength: 25), to: 25) + " " +
-            pad(truncateString("State", maxLength: 8), to: 8) + " " +
-            pad(truncateString("Device Type", maxLength: 20), to: 20) + " " +
+            DisplayFormat.pad(DisplayFormat.truncate("Name", maxLength: 25), to: 25) + " " +
+            DisplayFormat.pad(DisplayFormat.truncate("State", maxLength: 8), to: 8) + " " +
+            DisplayFormat.pad(DisplayFormat.truncate("Device Type", maxLength: 20), to: 20) + " " +
             "UUID"
         stdout <<< header.bold
         stdout <<< String(repeating: "-", count: 80).dim
@@ -152,31 +209,14 @@ class ListCommand: Command {
 
     /// Displays a single device row
     private func displayDeviceRow(_ device: SimulatorDevice, deviceTypeNameById: [String: String]) {
-        let resolvedTypeName = deviceTypeNameById[device.deviceTypeIdentifier] ?? extractDeviceTypeName(from: device.deviceTypeIdentifier)
-        let stateDisplay = formatDeviceState(device.state, isAvailable: device.isAvailable)
+        let resolvedTypeName = deviceTypeNameById[device.deviceTypeIdentifier] ?? DisplayFormat
+            .deviceTypeName(from: device.deviceTypeIdentifier)
+        let stateDisplay = DisplayFormat.coloredState(device.state, isAvailable: device.isAvailable)
 
-        let nameCol = pad(truncateString(device.name, maxLength: 25), to: 25)
-        let stateCol = pad(truncateString(stateDisplay, maxLength: 8), to: 8)
-        let typeCol = pad(truncateString(resolvedTypeName, maxLength: 20), to: 20)
+        let nameCol = DisplayFormat.pad(DisplayFormat.truncate(device.name, maxLength: 25), to: 25)
+        let stateCol = DisplayFormat.pad(DisplayFormat.truncate(stateDisplay, maxLength: 8), to: 8)
+        let typeCol = DisplayFormat.pad(DisplayFormat.truncate(resolvedTypeName, maxLength: 20), to: 20)
         stdout <<< "\(nameCol) \(stateCol) \(typeCol) \(device.udid.dim)"
-    }
-
-    /// Formats the device state with appropriate colors
-    private func formatDeviceState(_ state: SimulatorState, isAvailable: Bool) -> String {
-        if !isAvailable {
-            return "Unavailable".red
-        }
-
-        switch state {
-        case .booted:
-            return "Booted".green
-        case .booting:
-            return "Booting".yellow
-        case .shutdown:
-            return "Shutdown".dim
-        case .shuttingDown:
-            return "Shutting down".yellow
-        }
     }
 
     /// Displays a summary of the devices
@@ -195,54 +235,5 @@ class ListCommand: Command {
         }
     }
 
-    /// Extracts a display-friendly runtime name from the runtime identifier
-    private func extractRuntimeDisplayName(from identifier: String) -> String {
-        // Convert identifiers like "com.apple.CoreSimulator.SimRuntime.iOS-17-0" to "iOS 17.0"
-        let components = identifier.components(separatedBy: ".")
-        guard let lastComponent = components.last else {
-            return identifier
-        }
-
-        // Handle iOS, watchOS, tvOS patterns
-        if lastComponent.hasPrefix("iOS-") {
-            let version = lastComponent.replacingOccurrences(of: "iOS-", with: "").replacingOccurrences(of: "-", with: ".")
-            return "iOS \(version)"
-        } else if lastComponent.hasPrefix("watchOS-") {
-            let version = lastComponent.replacingOccurrences(of: "watchOS-", with: "").replacingOccurrences(of: "-", with: ".")
-            return "watchOS \(version)"
-        } else if lastComponent.hasPrefix("tvOS-") {
-            let version = lastComponent.replacingOccurrences(of: "tvOS-", with: "").replacingOccurrences(of: "-", with: ".")
-            return "tvOS \(version)"
-        }
-
-        return lastComponent
-    }
-
-    /// Extracts a display-friendly device type name from the device type identifier
-    private func extractDeviceTypeName(from identifier: String) -> String {
-        // Convert identifiers like "com.apple.CoreSimulator.SimDeviceType.iPhone-15" to "iPhone 15"
-        let components = identifier.components(separatedBy: ".")
-        guard let lastComponent = components.last else {
-            return identifier
-        }
-
-        return lastComponent.replacingOccurrences(of: "-", with: " ")
-    }
-
-    /// Truncates a string to the specified maximum length
-    private func truncateString(_ string: String, maxLength: Int) -> String {
-        if string.count <= maxLength {
-            return string
-        }
-
-        let truncated = String(string.prefix(maxLength - 3))
-        return truncated + "..."
-    }
-
-    /// Pads a string with spaces on the right to the specified width
-    private func pad(_ string: String, to width: Int) -> String {
-        let count = string.count
-        if count >= width { return string }
-        return string + String(repeating: " ", count: width - count)
-    }
+    // Identifier and column helpers moved to DisplayFormat
 }

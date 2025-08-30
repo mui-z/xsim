@@ -1,15 +1,6 @@
 {
-  "originHash" : "29d56d9748fc07299aa40b324e34c8cdd504af87e16b069bf3423933664df465",
+  "originHash" : "6ea7c0ca614ce532c0005611b5c645c7cd179d15c6e8ea68b169db95570e70e2",
   "pins" : [
-    {
-      "identity" : "pathkit",
-      "kind" : "remoteSourceControl",
-      "location" : "https://github.com/kylef/PathKit",
-      "state" : {
-        "revision" : "3bfd2737b700b9a36565a8c94f4ad2b050a5e574",
-        "version" : "1.0.1"
-      }
-    },
     {
       "identity" : "rainbow",
       "kind" : "remoteSourceControl",
@@ -17,15 +8,6 @@
       "state" : {
         "revision" : "16da5c62dd737258c6df2e8c430f8a3202f655a7",
         "version" : "4.2.0"
-      }
-    },
-    {
-      "identity" : "spectre",
-      "kind" : "remoteSourceControl",
-      "location" : "https://github.com/kylef/Spectre.git",
-      "state" : {
-        "revision" : "26cc5e9ae0947092c7139ef7ba612e34646086c7",
-        "version" : "0.10.1"
       }
     },
     {

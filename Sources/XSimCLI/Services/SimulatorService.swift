@@ -6,6 +6,7 @@ class SimulatorService {
     // MARK: - Private Properties
 
     private let xcrunPath: String
+    var resolvedXcrunPath: String { xcrunPath }
 
     // MARK: - Core simctl Execution Utilities
 
@@ -37,8 +38,8 @@ class SimulatorService {
 
         process.arguments = fullArguments
 
-        // Debug: Print the command being executed
-        print("Debug: Executing command: \(xcrunPath) \(fullArguments.joined(separator: " "))")
+        // Debug
+        Env.debug("Executing command: \(xcrunPath) \(fullArguments.joined(separator: " "))")
 
         let outputPipe = Pipe()
         let errorPipe = Pipe()
@@ -70,7 +71,7 @@ class SimulatorService {
             let errorData = errorPipe.fileHandleForReading.readDataToEndOfFile()
 
             if didTimeout {
-                print("Debug: simctl timed out after \(timeoutSeconds ?? 0)s. args=\(fullArguments.joined(separator: " "))")
+                Env.debug("simctl timed out after \(timeoutSeconds ?? 0)s. args=\(fullArguments.joined(separator: " "))")
                 throw SimulatorError.operationTimeout
             }
 
@@ -90,19 +91,26 @@ class SimulatorService {
                 // Emit a concise debug summary with both streams for troubleshooting.
                 let previewOut = stdoutText.prefix(200)
                 let previewErr = stderrText.prefix(200)
-                print("Debug: simctl failed. code=\(process.terminationStatus) stdout=\(previewOut) stderr=\(previewErr)")
+                Env.debug("simctl failed. code=\(process.terminationStatus) stdout=\(previewOut) stderr=\(previewErr)")
 
                 // If JSON was requested and the tool likely doesn't support it, probe without --json
                 if requiresJSON {
                     let lower = primaryMessage.lowercased()
-                    let mentionsJSONUnsupported = lower.contains("unrecognized") || lower.contains("unknown option") || lower.contains("--json")
+                    let mentionsJSONUnsupported = lower.contains("unrecognized") || lower.contains("unknown option") || lower
+                        .contains("--json")
                     if mentionsJSONUnsupported {
                         if let probe = try? executeSimctlCommand(arguments: arguments, requiresJSON: false),
                            let probePreview = String(data: probe.prefix(200), encoding: .utf8)
                         {
-                            throw SimulatorError.simctlCommandFailed("simctl's JSON output may not be supported by your Xcode. Please update Xcode (Xcode 9+). Raw output preview: \(probePreview)...")
+                            throw SimulatorError
+                                .simctlCommandFailed(
+                                    "simctl's JSON output may not be supported by your Xcode. Please update Xcode (Xcode 9+). Raw output preview: \(probePreview)..."
+                                )
                         } else {
-                            throw SimulatorError.simctlCommandFailed("simctl's JSON output may not be supported by your Xcode. Please update Xcode (Xcode 9+). Error: \(primaryMessage)")
+                            throw SimulatorError
+                                .simctlCommandFailed(
+                                    "simctl's JSON output may not be supported by your Xcode. Please update Xcode (Xcode 9+). Error: \(primaryMessage)"
+                                )
                         }
                     }
                 }
@@ -112,7 +120,7 @@ class SimulatorService {
 
             if requiresJSON {
                 let preview = String(data: outputData.prefix(200), encoding: .utf8) ?? "<non-utf8>"
-                print("Debug: JSON bytes=\(outputData.count). preview=\(preview)")
+                Env.debug("JSON bytes=\(outputData.count). preview=\(preview)")
             }
 
             return outputData
@@ -135,7 +143,7 @@ class SimulatorService {
             return try decoder.decode(type, from: data)
         } catch {
             let preview = String(data: data.prefix(200), encoding: .utf8) ?? "<non-utf8>"
-            print("Debug: JSON decode failed. preview=\(preview)")
+            Env.debug("JSON decode failed. preview=\(preview)")
             throw SimulatorError.simctlCommandFailed("Failed to parse JSON output: \(error.localizedDescription)")
         }
     }
@@ -200,7 +208,10 @@ class SimulatorService {
                 throw error
             }
         } catch {
-            throw SimulatorError.simctlCommandFailed("simctl is not available. Please ensure Xcode is properly installed. Error: \(error.localizedDescription)")
+            throw SimulatorError
+                .simctlCommandFailed(
+                    "simctl is not available. Please ensure Xcode is properly installed. Error: \(error.localizedDescription)"
+                )
         }
     }
 
@@ -249,7 +260,7 @@ class SimulatorService {
             }
         }
 
-        print("Debug: Parsed devices count: \(devices.count)")
+        Env.debug("Parsed devices count: \(devices.count)")
         return devices
     }
 
@@ -619,10 +630,46 @@ class SimulatorService {
 
     init() throws {
         xcrunPath = try SimulatorService.findXcrunPath()
-        // Debug: Print the found xcrun path
-        print("Debug: Using xcrun at path: \(xcrunPath)")
+        // Debug
+        Env.debug("Using xcrun at path: \(xcrunPath)")
         // NOTE: for debugging code.
         // try validateSimctlAvailability()
+    }
+
+    // MARK: - Diagnostics
+
+    struct DoctorReport {
+        let xcrunPath: String
+        let simctlAvailable: Bool
+        let jsonSupported: Bool
+        let notes: [String]
+    }
+
+    /// Performs environment diagnosis: simctl availability and JSON support.
+    func diagnoseEnvironment() throws -> DoctorReport {
+        var simctlOK = true
+        var jsonOK = true
+        var notes: [String] = []
+
+        // Check simctl availability
+        do {
+            _ = try executeSimctlCommand(arguments: ["help"], requiresJSON: false, timeoutSeconds: 5)
+        } catch {
+            simctlOK = false
+            notes.append("simctl is not available. Ensure Xcode and CLT are installed.")
+        }
+
+        // Check JSON support (devices list)
+        if simctlOK {
+            do {
+                _ = try executeSimctlCommand(arguments: ["list", "devices"], requiresJSON: true, timeoutSeconds: 8)
+            } catch {
+                jsonOK = false
+                notes.append("simctl JSON output not supported or failed. Update Xcode (9+) or avoid --json paths.")
+            }
+        }
+
+        return DoctorReport(xcrunPath: xcrunPath, simctlAvailable: simctlOK, jsonSupported: jsonOK, notes: notes)
     }
 }
 

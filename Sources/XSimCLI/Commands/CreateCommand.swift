@@ -2,7 +2,7 @@ import Rainbow
 import SwiftCLI
 
 /// Command to create a new simulator device
-class CreateCommand: Command {
+class CreateCommand: BaseSimCommand, Command {
     let name = "create"
     let shortDescription = "Create a new simulator"
     let longDescription = """
@@ -25,9 +25,7 @@ class CreateCommand: Command {
     @Flag("--list-runtimes", description: "List available runtimes")
     var listRuntimes: Bool
 
-    private var simulatorService: SimulatorService?
-
-    init() {}
+    override init() {}
 
     func execute() throws {
         do {
@@ -218,8 +216,8 @@ class CreateCommand: Command {
         stdout <<< "✓ Created a new simulator".green
         stdout <<< ""
 
-        let deviceTypeName = extractDeviceTypeName(from: deviceType)
-        let runtimeName = extractRuntimeDisplayName(from: runtime)
+        let deviceTypeName = DisplayFormat.deviceTypeName(from: deviceType)
+        let runtimeName = DisplayFormat.runtimeName(from: runtime)
 
         stdout <<< "Created simulator:".bold
         stdout <<< "  Name: \(name)".dim
@@ -231,46 +229,5 @@ class CreateCommand: Command {
         stdout <<< "Next steps:".dim
         stdout <<< "  • Start the simulator: xsim start \"\(name)\"".dim
         stdout <<< "  • List all simulators: xsim list".dim
-    }
-
-    /// Extracts a display-friendly runtime name from the runtime identifier
-    private func extractRuntimeDisplayName(from identifier: String) -> String {
-        let components = identifier.components(separatedBy: ".")
-        guard let lastComponent = components.last else {
-            return identifier
-        }
-
-        if lastComponent.hasPrefix("iOS-") {
-            let version = lastComponent.replacingOccurrences(of: "iOS-", with: "").replacingOccurrences(of: "-", with: ".")
-            return "iOS \(version)"
-        } else if lastComponent.hasPrefix("watchOS-") {
-            let version = lastComponent.replacingOccurrences(of: "watchOS-", with: "").replacingOccurrences(of: "-", with: ".")
-            return "watchOS \(version)"
-        } else if lastComponent.hasPrefix("tvOS-") {
-            let version = lastComponent.replacingOccurrences(of: "tvOS-", with: "").replacingOccurrences(of: "-", with: ".")
-            return "tvOS \(version)"
-        }
-
-        return lastComponent
-    }
-
-    /// Extracts a display-friendly device type name from the device type identifier
-    private func extractDeviceTypeName(from identifier: String) -> String {
-        let components = identifier.components(separatedBy: ".")
-        guard let lastComponent = components.last else {
-            return identifier
-        }
-
-        return lastComponent.replacingOccurrences(of: "-", with: " ")
-    }
-}
-
-// Lazy service accessor
-extension CreateCommand {
-    private func getService() throws -> SimulatorService {
-        if let service = simulatorService { return service }
-        let service = try SimulatorService()
-        simulatorService = service
-        return service
     }
 }

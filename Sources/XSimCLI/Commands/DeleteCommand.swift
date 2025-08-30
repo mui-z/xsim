@@ -2,7 +2,7 @@ import Rainbow
 import SwiftCLI
 
 /// Command to delete a simulator device
-class DeleteCommand: Command {
+class DeleteCommand: BaseSimCommand, Command {
     let name = "delete"
     let shortDescription = "Delete a simulator"
     let longDescription = """
@@ -24,12 +24,13 @@ class DeleteCommand: Command {
     @Flag("-f", "--force", description: "Delete without confirmation")
     var force: Bool
 
-    @Key("--runtime", description: "Delete all simulators for the specified runtime (e.g. 'iOS 17.0' or 'com.apple.CoreSimulator.SimRuntime.iOS-17-0')")
+    @Key(
+        "--runtime",
+        description: "Delete all simulators for the specified runtime (e.g. 'iOS 17.0' or 'com.apple.CoreSimulator.SimRuntime.iOS-17-0')"
+    )
     var runtimeFilter: String?
 
-    private var simulatorService: SimulatorService?
-
-    init() {}
+    override init() {}
 
     func execute() throws {
         do {
@@ -41,7 +42,7 @@ class DeleteCommand: Command {
             } else if let identifier = deviceIdentifier {
                 // Single device delete
                 let devices = try simulatorService.listDevices()
-                guard let device = findDevice(devices: devices, identifier: identifier) else {
+                guard let device = findDevice(in: devices, identifier: identifier) else {
                     throw SimulatorError.deviceNotFound(identifier)
                 }
 
@@ -81,7 +82,7 @@ class DeleteCommand: Command {
         let devices = try simulatorService.listDevices()
 
         let matchingDevices = devices.filter { device in
-            runtimeMatches(filter: runtimeFilter, runtimeIdentifier: device.runtimeIdentifier)
+            Filters.runtimeMatches(filter: runtimeFilter, runtimeIdentifier: device.runtimeIdentifier)
         }
 
         if matchingDevices.isEmpty {
@@ -109,7 +110,7 @@ class DeleteCommand: Command {
             for device in matchingDevices {
                 do {
                     try simulatorService.deleteSimulator(identifier: device.udid)
-                    stdout <<< "  ✓ Deleted: \(device.name) (\(extractDeviceTypeName(from: device.deviceTypeIdentifier)))".green
+                    stdout <<< "  ✓ Deleted: \(device.name) (\(DisplayFormat.deviceTypeName(from: device.deviceTypeIdentifier)))".green
                 } catch {
                     stdout <<< "  ✗ Failed: \(device.name) - \(error.localizedDescription)".red
                 }
@@ -117,28 +118,7 @@ class DeleteCommand: Command {
         }
     }
 
-    /// Checks if a runtime identifier matches a flexible filter
-    private func runtimeMatches(filter: String, runtimeIdentifier: String) -> Bool {
-        let filterLower = filter.lowercased()
-
-        // Exact match (full runtime identifier)
-        if runtimeIdentifier.lowercased() == filterLower { return true }
-
-        // Match against display form like "iOS 17.0"
-        let display = extractRuntimeDisplayName(from: runtimeIdentifier).lowercased()
-        if display == filterLower { return true }
-
-        // Allow filter like "iOS 17" (prefix match) or just version "17"/"17.0"
-        if display.hasPrefix(filterLower) { return true }
-
-        // Version-only match: e.g., filter "17" or "17.0"
-        let versionOnly = display.replacingOccurrences(of: "iOS ", with: "")
-            .replacingOccurrences(of: "watchOS ", with: "")
-            .replacingOccurrences(of: "tvOS ", with: "")
-        if versionOnly == filterLower || versionOnly.hasPrefix(filterLower) { return true }
-
-        return false
-    }
+    // runtime matching is provided by Filters.runtimeMatches
 
     /// Displays a warning summary for bulk deletion
     private func displayBulkDeleteWarning(devices: [SimulatorDevice], runtimeFilter: String) {
@@ -147,8 +127,8 @@ class DeleteCommand: Command {
         stdout <<< ""
         stdout <<< "The following \(devices.count) simulator(s) will be deleted for runtime filter '\(runtimeFilter)':".bold
         for device in devices.sorted(by: { $0.name < $1.name }) {
-            let deviceTypeName = extractDeviceTypeName(from: device.deviceTypeIdentifier)
-            let runtimeName = extractRuntimeDisplayName(from: device.runtimeIdentifier)
+            let deviceTypeName = DisplayFormat.deviceTypeName(from: device.deviceTypeIdentifier)
+            let runtimeName = DisplayFormat.runtimeName(from: device.runtimeIdentifier)
             stdout <<< "  • \(device.name) (\(deviceTypeName), \(runtimeName)) \(device.udid.dim)"
         }
         stdout <<< ""
@@ -173,8 +153,8 @@ class DeleteCommand: Command {
         stdout <<< "⚠️  Confirm deletion".yellow.bold
         stdout <<< ""
 
-        let deviceTypeName = extractDeviceTypeName(from: device.deviceTypeIdentifier)
-        let runtimeName = extractRuntimeDisplayName(from: device.runtimeIdentifier)
+        let deviceTypeName = DisplayFormat.deviceTypeName(from: device.deviceTypeIdentifier)
+        let runtimeName = DisplayFormat.runtimeName(from: device.runtimeIdentifier)
 
         stdout <<< "The following simulator will be deleted:".bold
         stdout <<< "  Name: \(device.name)"
@@ -183,7 +163,7 @@ class DeleteCommand: Command {
         stdout <<< "  UUID: \(device.udid)".dim
 
         if device.state.isRunning {
-            stdout <<< "  Current state: \(formatDeviceState(device.state))"
+            stdout <<< "  Current state: \(DisplayFormat.coloredState(device.state))"
             stdout <<< ""
             stdout <<< "Note: Running simulators will be stopped automatically".yellow
         }
@@ -229,8 +209,8 @@ class DeleteCommand: Command {
         stdout <<< "✓ Deleted the simulator".green
         stdout <<< ""
 
-        let deviceTypeName = extractDeviceTypeName(from: device.deviceTypeIdentifier)
-        let runtimeName = extractRuntimeDisplayName(from: device.runtimeIdentifier)
+        let deviceTypeName = DisplayFormat.deviceTypeName(from: device.deviceTypeIdentifier)
+        let runtimeName = DisplayFormat.runtimeName(from: device.runtimeIdentifier)
 
         stdout <<< "Deleted simulator:".bold
         stdout <<< "  Name: \(device.name)".dim
@@ -247,70 +227,6 @@ class DeleteCommand: Command {
         stdout <<< "  • Available device types: xsim create --list-types".dim
         stdout <<< "  • Available runtimes: xsim create --list-runtimes".dim
     }
-
-    /// Finds a device by identifier (name or UUID)
-    private func findDevice(devices: [SimulatorDevice], identifier: String) -> SimulatorDevice? {
-        // First try to find by UUID
-        if let device = devices.first(where: { $0.udid == identifier }) {
-            return device
-        }
-
-        // Then try to find by name
-        return devices.first(where: { $0.name == identifier })
-    }
-
-    /// Formats the device state with appropriate colors
-    private func formatDeviceState(_ state: SimulatorState) -> String {
-        switch state {
-        case .booted:
-            "Booted".green
-        case .booting:
-            "Booting".yellow
-        case .shutdown:
-            "Shutdown".dim
-        case .shuttingDown:
-            "Shutting down".yellow
-        }
-    }
-
-    /// Extracts a display-friendly runtime name from the runtime identifier
-    private func extractRuntimeDisplayName(from identifier: String) -> String {
-        let components = identifier.components(separatedBy: ".")
-        guard let lastComponent = components.last else {
-            return identifier
-        }
-
-        if lastComponent.hasPrefix("iOS-") {
-            let version = lastComponent.replacingOccurrences(of: "iOS-", with: "").replacingOccurrences(of: "-", with: ".")
-            return "iOS \(version)"
-        } else if lastComponent.hasPrefix("watchOS-") {
-            let version = lastComponent.replacingOccurrences(of: "watchOS-", with: "").replacingOccurrences(of: "-", with: ".")
-            return "watchOS \(version)"
-        } else if lastComponent.hasPrefix("tvOS-") {
-            let version = lastComponent.replacingOccurrences(of: "tvOS-", with: "").replacingOccurrences(of: "-", with: ".")
-            return "tvOS \(version)"
-        }
-
-        return lastComponent
-    }
-
-    /// Extracts a display-friendly device type name from the device type identifier
-    private func extractDeviceTypeName(from identifier: String) -> String {
-        let components = identifier.components(separatedBy: ".")
-        guard let lastComponent = components.last else {
-            return identifier
-        }
-
-        return lastComponent.replacingOccurrences(of: "-", with: " ")
-    }
 }
 
-// Lazy service accessor
-extension DeleteCommand {
-    private func getService() throws -> SimulatorService {
-        if let service = simulatorService { return service }
-        let service = try SimulatorService()
-        simulatorService = service
-        return service
-    }
-}
+// Formatting and device resolution helpers are provided by BaseSimCommand and DisplayFormat
