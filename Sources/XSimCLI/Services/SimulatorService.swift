@@ -509,11 +509,11 @@ class SimulatorService {
     func createSimulator(name: String, deviceType: String, runtime: String) throws -> String {
         // Resolve device type input to an identifier (accepts identifier or friendly name)
         let resolvedDeviceType = try resolveDeviceTypeIdentifier(from: deviceType)
-        // Resolve runtime input to an identifier (accepts identifier or friendly name/version)
+        // Resolve runtime input to an identifier (fast path avoids querying runtimes list)
         let resolvedRuntime = try resolveRuntimeIdentifier(from: runtime, forDeviceTypeIdentifier: resolvedDeviceType)
 
-        // Validate identifiers before create
-        try validateDeviceTypeAndRuntime(deviceType: resolvedDeviceType, runtime: resolvedRuntime)
+        // Validate device type only (runtime validity is delegated to simctl to avoid slow listings)
+        try validateDeviceType(deviceType: resolvedDeviceType)
 
         // Execute create command
         let data = try executeSimctlCommand(arguments: ["create", name, resolvedDeviceType, resolvedRuntime])
@@ -526,6 +526,14 @@ class SimulatorService {
         }
 
         return output
+    }
+
+    /// Validates device type identifier exists (fast path)
+    private func validateDeviceType(deviceType: String) throws {
+        let availableDeviceTypes = try getAvailableDeviceTypes()
+        guard availableDeviceTypes.contains(where: { $0.identifier == deviceType }) else {
+            throw SimulatorError.invalidDeviceType(deviceType)
+        }
     }
 
     /// Resolves a device type input (identifier or human-readable name) to a device type identifier
@@ -577,6 +585,11 @@ class SimulatorService {
     private func resolveRuntimeIdentifier(from input: String, forDeviceTypeIdentifier deviceTypeId: String?) throws -> String {
         let needle = input.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !needle.isEmpty else { throw SimulatorError.invalidRuntime(input) }
+
+        // Fast path: if input looks like an identifier or a common human-friendly form, build the identifier directly.
+        if let built = buildRuntimeIdentifier(from: needle, hintDeviceType: deviceTypeId) {
+            return built
+        }
 
         let runtimes = try getAvailableRuntimes()
         // 1) Exact identifier match
@@ -639,6 +652,47 @@ class SimulatorService {
         }
 
         throw SimulatorError.invalidRuntime(input)
+    }
+
+    /// Attempts to construct a runtime identifier from human-friendly input without querying simctl runtimes.
+    /// Examples accepted: "iOS 17", "iOS 17.0", "17", "17.0", "watchOS 11", "tvOS 17".
+    private func buildRuntimeIdentifier(from input: String, hintDeviceType: String?) -> String? {
+        let trimmed = input.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.hasPrefix("com.apple.CoreSimulator.SimRuntime.") {
+            return trimmed
+        }
+
+        // Detect platform from input or device type hint
+        func platform(from input: String, hint: String?) -> String {
+            let lower = input.lowercased()
+            if lower.contains("watchos") || lower.contains("watch") { return "watchOS" }
+            if lower.contains("tvos") || lower.contains("tv") { return "tvOS" }
+            if let hint {
+                if hint.contains("Watch") { return "watchOS" }
+                if hint.contains("TV") { return "tvOS" }
+            }
+            return "iOS"
+        }
+
+        let plat = platform(from: trimmed, hint: hintDeviceType)
+
+        // Extract first numeric token (version)
+        let lower = trimmed.lowercased()
+        let versionChars = Set("0123456789.")
+        var version = ""
+        var started = false
+        for ch in lower {
+            if versionChars.contains(ch) {
+                version.append(ch)
+                started = true
+            } else if started {
+                break
+            }
+        }
+        guard !version.isEmpty else { return nil }
+
+        let hyphenVersion = version.replacingOccurrences(of: ".", with: "-")
+        return "com.apple.CoreSimulator.SimRuntime.\(plat)-\(hyphenVersion)"
     }
 
     /// Gets available device types
