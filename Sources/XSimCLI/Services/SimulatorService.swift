@@ -494,12 +494,14 @@ class SimulatorService {
     func createSimulator(name: String, deviceType: String, runtime: String) throws -> String {
         // Resolve device type input to an identifier (accepts identifier or friendly name)
         let resolvedDeviceType = try resolveDeviceTypeIdentifier(from: deviceType)
+        // Resolve runtime input to an identifier (accepts identifier or friendly name/version)
+        let resolvedRuntime = try resolveRuntimeIdentifier(from: runtime, forDeviceTypeIdentifier: resolvedDeviceType)
 
         // Validate identifiers before create
-        try validateDeviceTypeAndRuntime(deviceType: resolvedDeviceType, runtime: runtime)
+        try validateDeviceTypeAndRuntime(deviceType: resolvedDeviceType, runtime: resolvedRuntime)
 
         // Execute create command
-        let data = try executeSimctlCommand(arguments: ["create", name, resolvedDeviceType, runtime])
+        let data = try executeSimctlCommand(arguments: ["create", name, resolvedDeviceType, resolvedRuntime])
 
         // Parse the UUID from the output
         guard let output = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines),
@@ -552,6 +554,76 @@ class SimulatorService {
         }
 
         throw SimulatorError.invalidDeviceType(input)
+    }
+
+    /// Resolves a runtime input (identifier or human-friendly) to a runtime identifier.
+    /// Accepts examples like: "com.apple.CoreSimulator.SimRuntime.iOS-17-0", "iOS 17", "iOS 17.0", "17", "17.0".
+    /// If a device type identifier is provided, prefer runtimes matching that platform.
+    private func resolveRuntimeIdentifier(from input: String, forDeviceTypeIdentifier deviceTypeId: String?) throws -> String {
+        let needle = input.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !needle.isEmpty else { throw SimulatorError.invalidRuntime(input) }
+
+        let runtimes = try getAvailableRuntimes()
+        // 1) Exact identifier match
+        if let r = runtimes.first(where: { $0.identifier == needle }) {
+            return r.identifier
+        }
+
+        // Platform preference from device type (if available)
+        var platformFilter: ((Runtime) -> Bool)? = nil
+        if let deviceTypeId {
+            if let types = try? getAvailableDeviceTypes(),
+               let dt = types.first(where: { $0.identifier == deviceTypeId })
+            {
+                if dt.isiPhone || dt.isiPad {
+                    platformFilter = { $0.isiOS }
+                } else if dt.isWatch {
+                    platformFilter = { $0.isWatchOS }
+                } else if dt.isTV {
+                    platformFilter = { $0.isTvOS }
+                }
+            }
+        }
+
+        var candidates = runtimes
+        if let pf = platformFilter { candidates = candidates.filter(pf) }
+
+        // 2) Flexible match via identifier/display heuristics
+        let matched = candidates.filter { rt in
+            Filters.runtimeMatches(filter: needle, runtimeIdentifier: rt.identifier)
+        }
+        if !matched.isEmpty {
+            // Choose the newest by version
+            let best = matched.max { a, b in versionLess(versionInts(from: a.identifier), versionInts(from: b.identifier)) }!
+            return best.identifier
+        }
+
+        // 3) Try matching against name/displayName directly
+        let lower = needle.lowercased()
+        let nameExact = candidates.first(where: { $0.name.lowercased() == lower })
+        if let r = nameExact { return r.identifier }
+
+        let displayExact = candidates.first(where: { "\($0.name) (\($0.version))".lowercased() == lower })
+        if let r = displayExact { return r.identifier }
+
+        // 4) Version-only: pick runtimes whose version equals or starts with the input
+        let versionToken: String? = {
+            let comps = lower.split(whereSeparator: { !("0"..."9").contains($0) && $0 != "." })
+            // Find first numeric-ish component
+            return comps.first.map(String.init)
+        }()
+        if let v = versionToken, !v.isEmpty {
+            let exact = candidates.filter { $0.version == v }
+            if let r = exact.max(by: { versionLess(versionInts(from: $0.identifier), versionInts(from: $1.identifier)) }) {
+                return r.identifier
+            }
+            let prefix = candidates.filter { $0.version.hasPrefix(v) }
+            if let r = prefix.max(by: { versionLess(versionInts(from: $0.identifier), versionInts(from: $1.identifier)) }) {
+                return r.identifier
+            }
+        }
+
+        throw SimulatorError.invalidRuntime(input)
     }
 
     /// Gets available device types

@@ -11,6 +11,7 @@ class CreateCommand: BaseSimCommand, Command {
 
     Examples:
       xsim create "My iPhone" com.apple.CoreSimulator.SimDeviceType.iPhone-15 com.apple.CoreSimulator.SimRuntime.iOS-17-0
+      xsim create "My iPhone" "iPhone 16 Pro" "iOS 17.0"   # human-friendly
       xsim create --list-types      # show available device types
       xsim create --list-runtimes   # show available runtimes
     """
