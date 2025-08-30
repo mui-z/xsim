@@ -710,7 +710,23 @@ class SimulatorService {
     /// - Returns: Array of Runtime objects
     /// - Throws: SimulatorError if the operation fails
     func getAvailableRuntimes() throws -> [Runtime] {
-        // Prefer a fast plain-text parse first to avoid JSON latency/timeouts on some setups.
+        // JSON-first: use simctl's --json output for accuracy and stability.
+        do {
+            let data = try executeSimctlCommand(arguments: ["list", "runtimes"], requiresJSON: true, timeoutSeconds: 8)
+            let response = try parseJSONOutput(data, as: SimctlRuntimesResponse.self)
+            return response.runtimes.map { runtimeData in
+                Runtime(
+                    identifier: runtimeData.identifier,
+                    name: runtimeData.name,
+                    version: runtimeData.version,
+                    isAvailable: runtimeData.isAvailable ?? true,
+                )
+            }
+        } catch {
+            // Fall back to plain-text parsing if JSON is unavailable/slow
+            Env.debug("JSON runtimes failed; falling back to plain text. error=\(error)")
+        }
+
         if let plainData = try? executeSimctlCommand(arguments: ["list", "runtimes"], requiresJSON: false, timeoutSeconds: 4),
            let text = String(data: plainData, encoding: .utf8)
         {
@@ -720,18 +736,7 @@ class SimulatorService {
             }
         }
 
-        // Fallback to JSON (more precise) with a reasonable timeout.
-        let data = try executeSimctlCommand(arguments: ["list", "runtimes"], requiresJSON: true, timeoutSeconds: 8)
-        let response = try parseJSONOutput(data, as: SimctlRuntimesResponse.self)
-
-        return response.runtimes.map { runtimeData in
-            Runtime(
-                identifier: runtimeData.identifier,
-                name: runtimeData.name,
-                version: runtimeData.version,
-                isAvailable: runtimeData.isAvailable ?? true,
-            )
-        }
+        throw SimulatorError.simctlCommandFailed("Failed to obtain runtimes via JSON and plain text")
     }
 
     /// Parses plain-text output from `simctl list runtimes` into Runtime objects.
