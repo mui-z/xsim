@@ -444,6 +444,17 @@ class SimulatorService {
     /// - Returns: Array of DeviceType objects
     /// - Throws: SimulatorError if the operation fails
     func getAvailableDeviceTypes() throws -> [DeviceType] {
+        // Fast path: parse plain-text which is typically quicker and reliable.
+        if let plainData = try? executeSimctlCommand(arguments: ["list", "devicetypes"], requiresJSON: false, timeoutSeconds: 4),
+           let text = String(data: plainData, encoding: .utf8)
+        {
+            let parsed = parsePlainDeviceTypesOutput(text)
+            if !parsed.isEmpty {
+                return parsed
+            }
+        }
+
+        // Fallback to JSON for precision if plain parse returns nothing.
         let data = try executeSimctlCommand(arguments: ["list", "devicetypes"], requiresJSON: true, timeoutSeconds: 8)
         let response = try parseJSONOutput(data, as: SimctlDeviceTypesResponse.self)
 
@@ -453,6 +464,45 @@ class SimulatorService {
                 name: deviceTypeData.name,
             )
         }
+    }
+
+    /// Parses plain-text output from `simctl list devicetypes` into DeviceType objects.
+    /// Example line: "iPhone 15 (com.apple.CoreSimulator.SimDeviceType.iPhone-15)"
+    private func parsePlainDeviceTypesOutput(_ text: String) -> [DeviceType] {
+        var types: [DeviceType] = []
+
+        for rawLine in text.split(separator: "\n") {
+            let line = rawLine.trimmingCharacters(in: .whitespaces)
+            guard !line.isEmpty else { continue }
+            // Skip headers or unrelated lines
+            if line.hasPrefix("==") { continue }
+            if !line.contains("com.apple.CoreSimulator.SimDeviceType") { continue }
+
+            // Use the last pair of parentheses as identifier container to handle names with parentheses
+            guard let lastOpen = line.lastIndex(of: "("), let lastClose = line.lastIndex(of: ")"), lastOpen < lastClose else {
+                continue
+            }
+
+            let idRange = line.index(after: lastOpen) ..< lastClose
+            let identifier = String(line[idRange])
+            guard identifier.contains("com.apple.CoreSimulator.SimDeviceType") else { continue }
+
+            let name = String(line[..<lastOpen]).trimmingCharacters(in: .whitespaces)
+            if !name.isEmpty {
+                types.append(DeviceType(identifier: identifier, name: name))
+            }
+        }
+
+        // Deduplicate by identifier while keeping the first occurrence
+        var seen: Set<String> = []
+        var unique: [DeviceType] = []
+        for t in types {
+            if !seen.contains(t.identifier) {
+                seen.insert(t.identifier)
+                unique.append(t)
+            }
+        }
+        return unique
     }
 
     /// Gets available runtimes
