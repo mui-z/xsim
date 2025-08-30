@@ -31,6 +31,9 @@ class ListCommand: BaseSimCommand, Command {
     @Key("--name-contains", description: "Filter by device name substring (case-insensitive)")
     var nameContains: String?
 
+    @Flag("--truncate", description: "Truncate and align columns (legacy compact view)")
+    var truncate: Bool
+
     override init() {}
 
     func execute() throws {
@@ -133,13 +136,16 @@ class ListCommand: BaseSimCommand, Command {
             stdout <<< ""
             stdout <<< "== \(runtime) ==".bold.blue
 
+            // Compute dynamic column widths for this runtime group
+            let (nameW, stateW, typeW) = computeColumnWidths(devicesForRuntime, deviceTypeNameById: deviceTypeNameById)
+
             // Display table header
-            displayTableHeader()
+            displayTableHeader(nameWidth: nameW, stateWidth: stateW, typeWidth: typeW)
 
             // Display devices for this runtime
             let sortedDevices = devicesForRuntime.sorted { $0.name < $1.name }
             for device in sortedDevices {
-                displayDeviceRow(device, deviceTypeNameById: deviceTypeNameById)
+                displayDeviceRow(device, deviceTypeNameById: deviceTypeNameById, nameWidth: nameW, stateWidth: stateW, typeWidth: typeW)
             }
         }
 
@@ -197,26 +203,70 @@ class ListCommand: BaseSimCommand, Command {
     }
 
     /// Displays the table header
-    private func displayTableHeader() {
-        let header =
-            DisplayFormat.pad(DisplayFormat.truncate("Name", maxLength: 25), to: 25) + " " +
-            DisplayFormat.pad(DisplayFormat.truncate("State", maxLength: 8), to: 8) + " " +
-            DisplayFormat.pad(DisplayFormat.truncate("Device Type", maxLength: 20), to: 20) + " " +
-            "UUID"
-        stdout <<< header.bold
-        stdout <<< String(repeating: "-", count: 80).dim
+    private func displayTableHeader(nameWidth: Int, stateWidth: Int, typeWidth: Int) {
+        if truncate {
+            let header =
+                DisplayFormat.pad(DisplayFormat.truncate("Name", maxLength: 25), to: 25) + " " +
+                DisplayFormat.pad(DisplayFormat.truncate("State", maxLength: 8), to: 8) + " " +
+                DisplayFormat.pad(DisplayFormat.truncate("Device Type", maxLength: 20), to: 20) + " " +
+                "UUID"
+            stdout <<< header.bold
+            stdout <<< String(repeating: "-", count: 80).dim
+        } else {
+            let nameH = DisplayFormat.pad("Name", to: nameWidth)
+            let stateH = DisplayFormat.pad("State", to: stateWidth)
+            let typeH = DisplayFormat.pad("Device Type", to: typeWidth)
+            let header = "\(nameH) \(stateH) \(typeH) UUID"
+            stdout <<< header.bold
+            stdout <<< String(repeating: "-", count: header.count).dim
+        }
     }
 
     /// Displays a single device row
-    private func displayDeviceRow(_ device: SimulatorDevice, deviceTypeNameById: [String: String]) {
+    private func displayDeviceRow(_ device: SimulatorDevice, deviceTypeNameById: [String: String], nameWidth: Int, stateWidth: Int, typeWidth: Int) {
         let resolvedTypeName = deviceTypeNameById[device.deviceTypeIdentifier] ?? DisplayFormat
             .deviceTypeName(from: device.deviceTypeIdentifier)
-        let stateDisplay = DisplayFormat.coloredState(device.state, isAvailable: device.isAvailable)
 
-        let nameCol = DisplayFormat.pad(DisplayFormat.truncate(device.name, maxLength: 25), to: 25)
-        let stateCol = DisplayFormat.pad(DisplayFormat.truncate(stateDisplay, maxLength: 8), to: 8)
-        let typeCol = DisplayFormat.pad(DisplayFormat.truncate(resolvedTypeName, maxLength: 20), to: 20)
-        stdout <<< "\(nameCol) \(stateCol) \(typeCol) \(device.udid.dim)"
+        if truncate {
+            let stateDisplay = DisplayFormat.coloredState(device.state, isAvailable: device.isAvailable)
+            let nameCol = DisplayFormat.pad(DisplayFormat.truncate(device.name, maxLength: 25), to: 25)
+            let stateCol = DisplayFormat.pad(DisplayFormat.truncate(stateDisplay, maxLength: 8), to: 8)
+            let typeCol = DisplayFormat.pad(DisplayFormat.truncate(resolvedTypeName, maxLength: 20), to: 20)
+            stdout <<< "\(nameCol) \(stateCol) \(typeCol) \(device.udid.dim)"
+        } else {
+            let nameCol = DisplayFormat.pad(device.name, to: nameWidth)
+
+            // Use plain state for width, color only the text part to avoid misalignment with ANSI codes
+            let statePlain = device.isAvailable ? device.state.displayName : "Unavailable"
+            let stateColored = DisplayFormat.coloredState(device.state, isAvailable: device.isAvailable)
+            let stateSpaces = max(0, stateWidth - statePlain.count)
+            let stateCol = stateColored + String(repeating: " ", count: stateSpaces)
+
+            let typeCol = DisplayFormat.pad(resolvedTypeName, to: typeWidth)
+
+            stdout <<< "\(nameCol) \(stateCol) \(typeCol) \(device.udid.dim)"
+        }
+    }
+
+    /// Computes dynamic column widths for a group of devices
+    private func computeColumnWidths(_ devices: [SimulatorDevice], deviceTypeNameById: [String: String]) -> (Int, Int, Int) {
+        var nameW = max(4, 0) // "Name"
+        var stateW = max(5, 0) // "State"
+        var typeW = max(11, 0) // "Device Type"
+
+        nameW = max(nameW, "Name".count)
+        stateW = max(stateW, "State".count)
+        typeW = max(typeW, "Device Type".count)
+
+        for d in devices {
+            nameW = max(nameW, d.name.count)
+            let statePlain = d.isAvailable ? d.state.displayName : "Unavailable"
+            stateW = max(stateW, statePlain.count)
+            let typeName = deviceTypeNameById[d.deviceTypeIdentifier] ?? DisplayFormat.deviceTypeName(from: d.deviceTypeIdentifier)
+            typeW = max(typeW, typeName.count)
+        }
+
+        return (nameW, stateW, typeW)
     }
 
     /// Displays a summary of the devices

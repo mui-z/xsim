@@ -26,7 +26,7 @@ class DeleteCommand: BaseSimCommand, Command {
 
     @Key(
         "--runtime",
-        description: "Delete all simulators for the specified runtime (e.g. 'iOS 17.0' or 'com.apple.CoreSimulator.SimRuntime.iOS-17-0')"
+        description: "Delete all simulators for the specified runtime (e.g. 'iOS 17.0' or 'com.apple.CoreSimulator.SimRuntime.iOS-17-0')",
     )
     var runtimeFilter: String?
 

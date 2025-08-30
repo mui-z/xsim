@@ -13,7 +13,7 @@ public class XSimCLI {
         cli = CLI(
             name: "xsim",
             version: "1.0.0",
-            description: "Xcode Simulator management tool – shortcuts for simctl commands"
+            description: "Xcode Simulator management tool – shortcuts for simctl commands",
         )
 
         // Register all commands

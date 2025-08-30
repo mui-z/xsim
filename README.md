@@ -56,3 +56,14 @@ xsim list --name-contains "iPhone"
 
 # runtimes are grouped and sorted by platform (iOS, watchOS, tvOS) and version (desc)
 ```
+
+Full width by default; compact view:
+
+```sh
+# default is full width (no truncation)
+xsim list
+
+# opt-in to truncated, aligned columns (legacy):
+xsim list --truncate
+```
+

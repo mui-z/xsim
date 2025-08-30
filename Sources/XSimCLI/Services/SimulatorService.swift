@@ -104,12 +104,12 @@ class SimulatorService {
                         {
                             throw SimulatorError
                                 .simctlCommandFailed(
-                                    "simctl's JSON output may not be supported by your Xcode. Please update Xcode (Xcode 9+). Raw output preview: \(probePreview)..."
+                                    "simctl's JSON output may not be supported by your Xcode. Please update Xcode (Xcode 9+). Raw output preview: \(probePreview)...",
                                 )
                         } else {
                             throw SimulatorError
                                 .simctlCommandFailed(
-                                    "simctl's JSON output may not be supported by your Xcode. Please update Xcode (Xcode 9+). Error: \(primaryMessage)"
+                                    "simctl's JSON output may not be supported by your Xcode. Please update Xcode (Xcode 9+). Error: \(primaryMessage)",
                                 )
                         }
                     }
@@ -210,7 +210,7 @@ class SimulatorService {
         } catch {
             throw SimulatorError
                 .simctlCommandFailed(
-                    "simctl is not available. Please ensure Xcode is properly installed. Error: \(error.localizedDescription)"
+                    "simctl is not available. Please ensure Xcode is properly installed. Error: \(error.localizedDescription)",
                 )
         }
     }
