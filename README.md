@@ -3,6 +3,16 @@
 
 simple xcrun simctl wrapper.
 
+
+## Install
+
+```sh
+mint install mui-z/lace
+```
+
+
+## Usage
+
 ```sh
 % xsim help
 
