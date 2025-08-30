@@ -63,7 +63,13 @@ class CreateCommand: BaseSimCommand, Command {
             let simulatorService = try getService()
             let uuid = try simulatorService.createSimulator(name: name, deviceType: deviceType, runtime: runtime)
 
-            displayCreateSuccess(name: name, deviceType: deviceType, runtime: runtime, uuid: uuid)
+            // 生成直後に実体を取得して、表示用に正規の識別子から名前を出す
+            if let created = try? simulatorService.listDevices().first(where: { $0.udid == uuid }) {
+                displayCreateSuccess(name: name, deviceType: created.deviceTypeIdentifier, runtime: created.runtimeIdentifier, uuid: uuid)
+            } else {
+                // 取得できない場合は従来の表示にフォールバック
+                displayCreateSuccess(name: name, deviceType: deviceType, runtime: runtime, uuid: uuid)
+            }
 
         } catch let error as SimulatorError {
             try handleSimulatorError(error)
