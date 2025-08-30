@@ -795,11 +795,8 @@ class SimulatorService {
     /// - Returns: Array of Runtime objects
     /// - Throws: SimulatorError if the operation fails
     func getAvailableRuntimes() throws -> [Runtime] {
-        print("start get ")
         let data = try executeSimctlCommand(arguments: ["list", "runtimes"], requiresJSON: true, timeoutSeconds: 30)
-        print("finish get ")
         let response = try parseJSONOutput(data, as: SimctlRuntimesResponse.self)
-        print("finish parse ")
 
         return response.runtimes.map { runtimeData in
             Runtime(
