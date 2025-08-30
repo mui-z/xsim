@@ -48,7 +48,7 @@ class SimulatorService {
         process.standardError = errorPipe
 
         // Drain stdout/stderr concurrently to avoid deadlocks on large outputs
-        final class PipeCollector {
+        final class PipeCollector: @unchecked Sendable {
             private var buffer = Data()
             private let lock = NSLock()
             func append(_ chunk: Data) {
