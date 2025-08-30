@@ -7,7 +7,7 @@ simple xcrun simctl wrapper.
 ## Install
 
 ```sh
-mint install mui-z/lace
+mint install mui-z/xsim
 ```
 
 
