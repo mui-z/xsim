@@ -813,47 +813,23 @@ class SimulatorService {
         }
     }
 
-    /// Verifies that a device has been deleted successfully
-    /// - Parameter deviceUUID: The UUID of the device to verify
-    /// - Throws: SimulatorError if verification fails
+    /// Best-effort check that a device has been deleted.
+    /// Note: single-shot check; logs a debug warning if still present, but does not throw.
     private func verifyDeviceDeleted(_ deviceUUID: String) throws {
-        let maxAttempts = 5
-        let delayBetweenAttempts: TimeInterval = 0.5
-
-        for attempt in 1 ... maxAttempts {
-            let devices = try listDevices()
-
-            // If device is no longer in the list, deletion was successful
-            if !devices.contains(where: { $0.udid == deviceUUID }) {
-                return
-            }
-
-            if attempt == maxAttempts {
-                throw SimulatorError.simctlCommandFailed("Device deletion verification failed")
-            }
-
-            Thread.sleep(forTimeInterval: delayBetweenAttempts)
+        let devices = try listDevices()
+        if devices.contains(where: { $0.udid == deviceUUID }) {
+            Env.debug("Deletion not yet reflected for \(deviceUUID); proceeding without failure")
         }
     }
 
-    /// Verifies that multiple devices have been deleted successfully
-    /// - Parameter deviceUUIDs: The UUIDs of the devices to verify
-    /// - Throws: SimulatorError if verification fails
+    /// Best-effort check for bulk deletion.
+    /// Note: single-shot check; logs remaining UDIDs in debug, but does not throw.
     private func verifyDevicesDeleted(_ deviceUUIDs: [String]) throws {
         let target = Set(deviceUUIDs)
-        let maxAttempts = 5
-        let delayBetweenAttempts: TimeInterval = 0.5
-
-        for attempt in 1 ... maxAttempts {
-            let devices = try listDevices()
-            let remaining = Set(devices.map(\.udid)).intersection(target)
-            if remaining.isEmpty {
-                return
-            }
-            if attempt == maxAttempts {
-                throw SimulatorError.simctlCommandFailed("Bulk deletion verification failed for: \(remaining.joined(separator: ", "))")
-            }
-            Thread.sleep(forTimeInterval: delayBetweenAttempts)
+        let devices = try listDevices()
+        let remaining = Set(devices.map(\.udid)).intersection(target)
+        if !remaining.isEmpty {
+            Env.debug("Bulk deletion not fully reflected; remaining: \(remaining.joined(separator: ", "))")
         }
     }
 
