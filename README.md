@@ -1,4 +1,7 @@
 # XSim
+[![Swift](https://img.shields.io/badge/Swift-FA7343?style=for-the-badge)](https://github.com/apple/swift)
+[![LICENSE: MIT SUSHI-WARE🍣](https://raw.githubusercontent.com/watasuke102/mit-sushi-ware/master/MIT-SUSHI-WARE.svg)](https://github.com/mui-z/xsim/blob/main/LICENSE)
+
 
 simple xcrun simctl wrapper.
 
