@@ -337,7 +337,7 @@ final class SimulatorServiceTests: XCTestCase {
         let uuid = try simulatorService.createSimulator(
             name: testName,
             deviceType: base.deviceTypeIdentifier,
-            runtime: base.runtimeIdentifier
+            runtime: base.runtimeIdentifier,
         )
 
         XCTAssertFalse(uuid.isEmpty, "Created simulator UUID should not be empty")
@@ -417,7 +417,7 @@ final class SimulatorServiceTests: XCTestCase {
         let uuid = try simulatorService.createSimulator(
             name: testName,
             deviceType: base.deviceTypeIdentifier,
-            runtime: base.runtimeIdentifier
+            runtime: base.runtimeIdentifier,
         )
 
         // Verify it was created
@@ -445,7 +445,7 @@ final class SimulatorServiceTests: XCTestCase {
         let uuid = try simulatorService.createSimulator(
             name: testName,
             deviceType: base.deviceTypeIdentifier,
-            runtime: base.runtimeIdentifier
+            runtime: base.runtimeIdentifier,
         )
 
         try simulatorService.startSimulator(identifier: uuid)

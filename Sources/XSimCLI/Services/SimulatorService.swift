@@ -1,3 +1,4 @@
+import Darwin
 import Dispatch
 import Foundation
 
@@ -40,40 +41,33 @@ class SimulatorService {
         // Debug
         Env.debug("Executing command: \(xcrunPath) \(fullArguments.joined(separator: " "))")
 
+        // Pipes
         let outputPipe = Pipe()
         let errorPipe = Pipe()
-
         process.standardOutput = outputPipe
         process.standardError = errorPipe
 
-        // Drain stdout/stderr concurrently to avoid deadlocks on large outputs
-        final class PipeCollector: @unchecked Sendable {
-            private var buffer = Data()
-            private let lock = NSLock()
-            func append(_ chunk: Data) {
-                lock.lock(); buffer.append(chunk); lock.unlock()
-            }
-
-            func takeRemaining(from handle: FileHandle) {
-                let rest = handle.readDataToEndOfFile()
-                if !rest.isEmpty { append(rest) }
-            }
-
-            var data: Data { lock.lock(); defer { lock.unlock() }; return buffer }
-            var count: Int { lock.lock(); defer { lock.unlock() }; return buffer.count }
-        }
-
-        let stdoutCollector = PipeCollector()
-        let stderrCollector = PipeCollector()
         let outHandle = outputPipe.fileHandleForReading
         let errHandle = errorPipe.fileHandleForReading
-        outHandle.readabilityHandler = { handle in
-            let chunk = handle.availableData
-            if !chunk.isEmpty { stdoutCollector.append(chunk) }
+
+        // Drain stdout/stderr on background threads using blocking reads.
+        // This avoids any dependency on run loops or readability handlers and
+        // prevents deadlocks when simctl outputs more than the pipe buffer.
+        var stdoutData = Data()
+        var stderrData = Data()
+        let ioLock = NSLock()
+        let readGroup = DispatchGroup()
+        readGroup.enter()
+        DispatchQueue.global(qos: .userInitiated).async {
+            let data = outHandle.readDataToEndOfFile()
+            ioLock.lock(); stdoutData = data; ioLock.unlock()
+            readGroup.leave()
         }
-        errHandle.readabilityHandler = { handle in
-            let chunk = handle.availableData
-            if !chunk.isEmpty { stderrCollector.append(chunk) }
+        readGroup.enter()
+        DispatchQueue.global(qos: .userInitiated).async {
+            let data = errHandle.readDataToEndOfFile()
+            ioLock.lock(); stderrData = data; ioLock.unlock()
+            readGroup.leave()
         }
 
         do {
@@ -81,26 +75,38 @@ class SimulatorService {
 
             var didTimeout = false
             if let timeout = timeoutSeconds {
-                let group = DispatchGroup()
-                group.enter()
-                DispatchQueue.global().async {
+                // Wait for process exit with timeout
+                let exitGroup = DispatchGroup()
+                exitGroup.enter()
+                DispatchQueue.global(qos: .userInitiated).async {
                     process.waitUntilExit()
-                    group.leave()
+                    exitGroup.leave()
                 }
-                let result = group.wait(timeout: .now() + timeout)
+                let result = exitGroup.wait(timeout: .now() + timeout)
                 if result == .timedOut {
                     didTimeout = true
-                    process.terminate()
+                    // Ask the process to terminate, then escalate if needed.
+                    if process.isRunning { process.terminate() }
+                    // Give it a brief grace period to exit and close pipes.
+                    let graceDeadline = DispatchTime.now() + 1.5
+                    if exitGroup.wait(timeout: graceDeadline) == .timedOut {
+                        // Force kill if still running to unblock any readers.
+                        let pid = process.processIdentifier
+                        if pid > 0 { _ = Darwin.kill(pid, SIGKILL) }
+                        _ = exitGroup.wait(timeout: .now() + 0.5)
+                    }
+                    // Close pipe readers to unblock background readers if needed.
+                    outHandle.closeFile()
+                    errHandle.closeFile()
+                } else {
+                    // Ensure output is fully read
+                    readGroup.wait()
                 }
             } else {
+                // No timeout: wait to exit and drain all output
                 process.waitUntilExit()
+                readGroup.wait()
             }
-
-            // Stop handlers and read any remaining bytes
-            outHandle.readabilityHandler = nil
-            errHandle.readabilityHandler = nil
-            stdoutCollector.takeRemaining(from: outHandle)
-            stderrCollector.takeRemaining(from: errHandle)
 
             if didTimeout {
                 Env.debug("simctl timed out after \(timeoutSeconds ?? 0)s. args=\(fullArguments.joined(separator: " "))")
@@ -108,8 +114,8 @@ class SimulatorService {
             }
 
             if process.terminationStatus != 0 {
-                let stderrText = String(data: stderrCollector.data, encoding: .utf8) ?? ""
-                let stdoutText = String(data: stdoutCollector.data, encoding: .utf8) ?? ""
+                let stderrText = String(data: stderrData, encoding: .utf8) ?? ""
+                let stdoutText = String(data: stdoutData, encoding: .utf8) ?? ""
 
                 // Many simctl errors print to stdout instead of stderr; prefer stderr, fall back to stdout.
                 let primaryMessage: String = {
@@ -151,11 +157,11 @@ class SimulatorService {
             }
 
             if requiresJSON {
-                let preview = String(data: stdoutCollector.data.prefix(200), encoding: .utf8) ?? "<non-utf8>"
-                Env.debug("JSON bytes=\(stdoutCollector.count). preview=\(preview)")
+                let preview = String(data: stdoutData.prefix(200), encoding: .utf8) ?? "<non-utf8>"
+                Env.debug("JSON bytes=\(stdoutData.count). preview=\(preview)")
             }
 
-            return stdoutCollector.data
+            return stdoutData
         } catch let error as SimulatorError {
             throw error
         } catch {
