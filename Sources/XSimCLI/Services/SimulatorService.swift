@@ -69,20 +69,12 @@ final class SimulatorService: Sendable {
         do {
             try process.run()
 
-            // Drain both pipes using async read APIs
+            // Drain both pipes using async read APIs (macOS 12+ guaranteed)
             let stdoutTask = Task(priority: .userInitiated) { () -> Data in
-                if #available(macOS 12.0, *) {
-                    return await (try? outHandle.readToEnd()) ?? Data()
-                } else {
-                    return outHandle.readDataToEndOfFile()
-                }
+                await (try? outHandle.readToEnd()) ?? Data()
             }
             let stderrTask = Task(priority: .userInitiated) { () -> Data in
-                if #available(macOS 12.0, *) {
-                    return await (try? errHandle.readToEnd()) ?? Data()
-                } else {
-                    return errHandle.readDataToEndOfFile()
-                }
+                await (try? errHandle.readToEnd()) ?? Data()
             }
 
             // Await process exit or timeout
