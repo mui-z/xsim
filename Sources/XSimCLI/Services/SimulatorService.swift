@@ -3,7 +3,7 @@ import Dispatch
 import Foundation
 
 /// Service class for managing iOS Simulator operations through simctl
-class SimulatorService {
+final class SimulatorService: Sendable {
     // MARK: - Private Properties
 
     private let xcrunPath: String
@@ -70,15 +70,19 @@ class SimulatorService {
             try process.run()
 
             // Drain both pipes using async read APIs
-            async let stdoutData: Data = if #available(macOS 12.0, *) {
-                await (try? outHandle.readToEnd()) ?? Data()
-            } else {
-                outHandle.readDataToEndOfFile()
+            let stdoutTask = Task(priority: .userInitiated) { () -> Data in
+                if #available(macOS 12.0, *) {
+                    return await (try? outHandle.readToEnd()) ?? Data()
+                } else {
+                    return outHandle.readDataToEndOfFile()
+                }
             }
-            async let stderrData: Data = if #available(macOS 12.0, *) {
-                await (try? errHandle.readToEnd()) ?? Data()
-            } else {
-                errHandle.readDataToEndOfFile()
+            let stderrTask = Task(priority: .userInitiated) { () -> Data in
+                if #available(macOS 12.0, *) {
+                    return await (try? errHandle.readToEnd()) ?? Data()
+                } else {
+                    return errHandle.readDataToEndOfFile()
+                }
             }
 
             // Await process exit or timeout
@@ -94,32 +98,31 @@ class SimulatorService {
             var didTimeout = false
             if let timeout = timeoutSeconds {
                 let timeoutNanos = UInt64(max(0, timeout) * 1_000_000_000)
-                async let exited: Void = waitForExitAsync(process)
-                async let slept: Void = Task.sleep(nanoseconds: timeoutNanos)
 
-                await withTaskGroup(of: Int.self) { group in
-                    group.addTask { await exited; return 0 }
-                    group.addTask { await slept; return 1 }
-                    if let first = await group.next() {
-                        if first == 1 {
-                            didTimeout = true
-                            if process.isRunning { process.terminate() }
-                            try? await Task.sleep(nanoseconds: 1_500_000_000)
-                            if process.isRunning {
-                                let pid = process.processIdentifier
-                                if pid > 0 { _ = Darwin.kill(pid, SIGKILL) }
-                            }
-                            outHandle.closeFile()
-                            errHandle.closeFile()
-                        }
+                // Race process exit vs timeout sleep
+                let first = await withTaskGroup(of: Int.self) { group -> Int in
+                    group.addTask { await waitForExitAsync(process); return 0 }
+                    group.addTask { try? await Task.sleep(nanoseconds: timeoutNanos); return 1 }
+                    return await group.next() ?? 0
+                }
+
+                if first == 1 {
+                    didTimeout = true
+                    if process.isRunning { process.terminate() }
+                    try? await Task.sleep(nanoseconds: 1_500_000_000)
+                    if process.isRunning {
+                        let pid = process.processIdentifier
+                        if pid > 0 { _ = Darwin.kill(pid, SIGKILL) }
                     }
+                    outHandle.closeFile()
+                    errHandle.closeFile()
                 }
             } else {
                 await waitForExitAsync(process)
             }
 
-            let outData = await stdoutData
-            let errData = await stderrData
+            let outData = await stdoutTask.value
+            let errData = await stderrTask.value
 
             if didTimeout {
                 Env.debug("simctl timed out after \(timeoutSeconds ?? 0)s. args=\(fullArguments.joined(separator: " "))")
