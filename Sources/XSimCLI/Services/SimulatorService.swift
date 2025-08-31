@@ -471,50 +471,6 @@ class SimulatorService {
         }
     }
 
-    /// Resets a simulator device (erases all data and settings)
-    /// - Parameter identifier: The device name or UUID to reset
-    /// - Throws: SimulatorError if the operation fails
-    func resetSimulator(identifier: String) throws {
-        let device = try findDevice(by: identifier)
-
-        // If device is running, stop it first
-        if device.state.isRunning {
-            try stopSimulator(identifier: identifier)
-        }
-
-        // Execute erase command
-        _ = try executeSimctlCommand(arguments: ["erase", device.udid])
-
-        // Note: erase command doesn't require verification as it's immediate
-        // The device will remain in shutdown state after erase
-    }
-
-    /// Installs an app on a simulator device
-    /// - Parameters:
-    ///   - bundlePath: Path to the app bundle (.app file)
-    ///   - deviceIdentifier: The device name or UUID to install the app on
-    /// - Throws: SimulatorError if the operation fails
-    func installApp(bundlePath: String, deviceIdentifier: String) throws {
-        // Validate app bundle path
-        try validateAppBundlePath(bundlePath)
-
-        // Find the target device
-        let device = try findDevice(by: deviceIdentifier)
-
-        // Check if device is available
-        guard device.isAvailable else {
-            throw SimulatorError.deviceNotFound(deviceIdentifier)
-        }
-
-        // Device must be booted to install apps
-        if !device.state.isRunning {
-            throw SimulatorError.deviceNotRunning(deviceIdentifier)
-        }
-
-        // Execute install command
-        _ = try executeSimctlCommand(arguments: ["install", device.udid, bundlePath])
-    }
-
     /// Creates a new simulator device
     /// - Parameters:
     ///   - name: Name for the new simulator
