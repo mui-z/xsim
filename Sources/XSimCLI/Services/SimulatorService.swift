@@ -17,21 +17,39 @@ class SimulatorService {
     /// - Returns: The command output as Data
     /// - Throws: SimulatorError if the command fails
     private func executeSimctlCommand(arguments: [String], requiresJSON: Bool = false, timeoutSeconds: TimeInterval? = nil) throws -> Data {
+        let semaphore = DispatchSemaphore(value: 0)
+        var result: Result<Data, Error>!
+        Task.detached(priority: .userInitiated) { [arguments, requiresJSON, timeoutSeconds] in
+            do {
+                let data = try await self.executeSimctlCommandAsync(
+                    arguments: arguments,
+                    requiresJSON: requiresJSON,
+                    timeoutSeconds: timeoutSeconds,
+                )
+                result = .success(data)
+            } catch {
+                result = .failure(error)
+            }
+            semaphore.signal()
+        }
+        semaphore.wait()
+        return try result.get()
+    }
+
+    /// Async Swift Concurrency implementation for simctl execution.
+    @discardableResult
+    private func executeSimctlCommandAsync(arguments: [String], requiresJSON: Bool = false, timeoutSeconds: TimeInterval? = nil) async throws -> Data {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: xcrunPath)
 
         var fullArguments = ["simctl"]
         fullArguments.append(contentsOf: arguments)
 
-        // Add JSON output flag if required.
-        // simctl expects --json as an option to the 'list' subcommand, e.g.:
-        //   xcrun simctl list --json devices
-        // not before the subcommand. Place it right after 'list' when present.
+        // Add JSON output flag if required right after 'list'
         if requiresJSON, !arguments.contains("--json") {
             if let listIndex = fullArguments.firstIndex(of: "list") {
                 fullArguments.insert("--json", at: listIndex + 1)
             } else {
-                // Fallback: if 'list' isn't present for some reason, append at end
                 fullArguments.append("--json")
             }
         }
@@ -41,72 +59,67 @@ class SimulatorService {
         // Debug
         Env.debug("Executing command: \(xcrunPath) \(fullArguments.joined(separator: " "))")
 
-        // Pipes
         let outputPipe = Pipe()
         let errorPipe = Pipe()
         process.standardOutput = outputPipe
         process.standardError = errorPipe
-
         let outHandle = outputPipe.fileHandleForReading
         let errHandle = errorPipe.fileHandleForReading
-
-        // Drain stdout/stderr on background threads using blocking reads.
-        // This avoids any dependency on run loops or readability handlers and
-        // prevents deadlocks when simctl outputs more than the pipe buffer.
-        var stdoutData = Data()
-        var stderrData = Data()
-        let ioLock = NSLock()
-        let readGroup = DispatchGroup()
-        readGroup.enter()
-        DispatchQueue.global(qos: .userInitiated).async {
-            let data = outHandle.readDataToEndOfFile()
-            ioLock.lock(); stdoutData = data; ioLock.unlock()
-            readGroup.leave()
-        }
-        readGroup.enter()
-        DispatchQueue.global(qos: .userInitiated).async {
-            let data = errHandle.readDataToEndOfFile()
-            ioLock.lock(); stderrData = data; ioLock.unlock()
-            readGroup.leave()
-        }
 
         do {
             try process.run()
 
+            // Drain both pipes using async read APIs
+            async let stdoutData: Data = if #available(macOS 12.0, *) {
+                await (try? outHandle.readToEnd()) ?? Data()
+            } else {
+                outHandle.readDataToEndOfFile()
+            }
+            async let stderrData: Data = if #available(macOS 12.0, *) {
+                await (try? errHandle.readToEnd()) ?? Data()
+            } else {
+                errHandle.readDataToEndOfFile()
+            }
+
+            // Await process exit or timeout
+            func waitForExitAsync(_ proc: Process) async {
+                await withCheckedContinuation { (cont: CheckedContinuation<Void, Never>) in
+                    DispatchQueue.global(qos: .userInitiated).async {
+                        proc.waitUntilExit()
+                        cont.resume()
+                    }
+                }
+            }
+
             var didTimeout = false
             if let timeout = timeoutSeconds {
-                // Wait for process exit with timeout
-                let exitGroup = DispatchGroup()
-                exitGroup.enter()
-                DispatchQueue.global(qos: .userInitiated).async {
-                    process.waitUntilExit()
-                    exitGroup.leave()
-                }
-                let result = exitGroup.wait(timeout: .now() + timeout)
-                if result == .timedOut {
-                    didTimeout = true
-                    // Ask the process to terminate, then escalate if needed.
-                    if process.isRunning { process.terminate() }
-                    // Give it a brief grace period to exit and close pipes.
-                    let graceDeadline = DispatchTime.now() + 1.5
-                    if exitGroup.wait(timeout: graceDeadline) == .timedOut {
-                        // Force kill if still running to unblock any readers.
-                        let pid = process.processIdentifier
-                        if pid > 0 { _ = Darwin.kill(pid, SIGKILL) }
-                        _ = exitGroup.wait(timeout: .now() + 0.5)
+                let timeoutNanos = UInt64(max(0, timeout) * 1_000_000_000)
+                async let exited: Void = waitForExitAsync(process)
+                async let slept: Void = Task.sleep(nanoseconds: timeoutNanos)
+
+                await withTaskGroup(of: Int.self) { group in
+                    group.addTask { await exited; return 0 }
+                    group.addTask { await slept; return 1 }
+                    if let first = await group.next() {
+                        if first == 1 {
+                            didTimeout = true
+                            if process.isRunning { process.terminate() }
+                            try? await Task.sleep(nanoseconds: 1_500_000_000)
+                            if process.isRunning {
+                                let pid = process.processIdentifier
+                                if pid > 0 { _ = Darwin.kill(pid, SIGKILL) }
+                            }
+                            outHandle.closeFile()
+                            errHandle.closeFile()
+                        }
                     }
-                    // Close pipe readers to unblock background readers if needed.
-                    outHandle.closeFile()
-                    errHandle.closeFile()
-                } else {
-                    // Ensure output is fully read
-                    readGroup.wait()
                 }
             } else {
-                // No timeout: wait to exit and drain all output
-                process.waitUntilExit()
-                readGroup.wait()
+                await waitForExitAsync(process)
             }
+
+            let outData = await stdoutData
+            let errData = await stderrData
 
             if didTimeout {
                 Env.debug("simctl timed out after \(timeoutSeconds ?? 0)s. args=\(fullArguments.joined(separator: " "))")
@@ -114,8 +127,8 @@ class SimulatorService {
             }
 
             if process.terminationStatus != 0 {
-                let stderrText = String(data: stderrData, encoding: .utf8) ?? ""
-                let stdoutText = String(data: stdoutData, encoding: .utf8) ?? ""
+                let stderrText = String(data: errData, encoding: .utf8) ?? ""
+                let stdoutText = String(data: outData, encoding: .utf8) ?? ""
 
                 // Many simctl errors print to stdout instead of stderr; prefer stderr, fall back to stdout.
                 let primaryMessage: String = {
@@ -134,21 +147,14 @@ class SimulatorService {
                 // If JSON was requested and the tool likely doesn't support it, probe without --json
                 if requiresJSON {
                     let lower = primaryMessage.lowercased()
-                    let mentionsJSONUnsupported = lower.contains("unrecognized") || lower.contains("unknown option") || lower
-                        .contains("--json")
+                    let mentionsJSONUnsupported = lower.contains("unrecognized") || lower.contains("unknown option") || lower.contains("--json")
                     if mentionsJSONUnsupported {
                         if let probe = try? executeSimctlCommand(arguments: arguments, requiresJSON: false),
                            let probePreview = String(data: probe.prefix(200), encoding: .utf8)
                         {
-                            throw SimulatorError
-                                .simctlCommandFailed(
-                                    "simctl's JSON output may not be supported by your Xcode. Please update Xcode (Xcode 9+). Raw output preview: \(probePreview)...",
-                                )
+                            throw SimulatorError.simctlCommandFailed("simctl's JSON output may not be supported by your Xcode. Please update Xcode (Xcode 9+). Raw output preview: \(probePreview)...")
                         } else {
-                            throw SimulatorError
-                                .simctlCommandFailed(
-                                    "simctl's JSON output may not be supported by your Xcode. Please update Xcode (Xcode 9+). Error: \(primaryMessage)",
-                                )
+                            throw SimulatorError.simctlCommandFailed("simctl's JSON output may not be supported by your Xcode. Please update Xcode (Xcode 9+). Error: \(primaryMessage)")
                         }
                     }
                 }
@@ -157,11 +163,11 @@ class SimulatorService {
             }
 
             if requiresJSON {
-                let preview = String(data: stdoutData.prefix(200), encoding: .utf8) ?? "<non-utf8>"
-                Env.debug("JSON bytes=\(stdoutData.count). preview=\(preview)")
+                let preview = String(data: outData.prefix(200), encoding: .utf8) ?? "<non-utf8>"
+                Env.debug("JSON bytes=\(outData.count). preview=\(preview)")
             }
 
-            return stdoutData
+            return outData
         } catch let error as SimulatorError {
             throw error
         } catch {
