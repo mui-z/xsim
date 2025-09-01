@@ -27,6 +27,7 @@ public class XSimCLI {
     private func registerCommands() {
         // Register all available commands without heavy initialization
         cli.commands = [
+            RunCommand(),
             ListCommand(),
             StartCommand(),
             StopCommand(),

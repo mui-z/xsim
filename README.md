@@ -23,6 +23,7 @@ Usage: xsim <command> [options]
 Xcode Simulator management tool – shortcuts for simctl commands
 
 Commands:
+  run             Run a simulator (default)
   list            List available simulators
   start           Start a simulator
   stop            Stop simulators
@@ -76,4 +77,13 @@ Debug logging:
 ```sh
 # enable verbose debug logs to stderr
 XSIM_VERBOSE=1 xsim list
+```
+Quick start:
+
+```sh
+# If no simulators are running, this starts the most recently used
+xsim
+
+# Same behavior as an explicit command
+xsim run
 ```
