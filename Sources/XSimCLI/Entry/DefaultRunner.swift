@@ -16,7 +16,14 @@ public enum DefaultRunner {
             guard running.isEmpty else { return false }
 
             guard let lastUDID = RecentDeviceStore.lastBootedUDID() else { return false }
-            fputs("Starting last used simulator...\n", stderr)
+            if let dev = devices.first(where: { $0.udid == lastUDID }) {
+                let typeName = DisplayFormat.deviceTypeName(from: dev.deviceTypeIdentifier)
+                let runtimeName = DisplayFormat.runtimeName(from: dev.runtimeIdentifier)
+                let line = "Starting last used simulator: \(dev.name) (\(typeName), \(runtimeName))\n"
+                if let data = line.data(using: .utf8) { FileHandle.standardError.write(data) }
+            } else {
+                fputs("Starting last used simulator...\n", stderr)
+            }
             try service.startSimulator(identifier: lastUDID)
             return true
         } catch {

@@ -43,7 +43,13 @@ class RunCommand: BaseSimCommand, Command {
             }
 
             if let lastUDID = RecentDeviceStore.lastBootedUDID() {
-                stdout <<< "Starting last used simulator...".dim
+                if let dev = devices.first(where: { $0.udid == lastUDID }) {
+                    let typeName = DisplayFormat.deviceTypeName(from: dev.deviceTypeIdentifier)
+                    let runtimeName = DisplayFormat.runtimeName(from: dev.runtimeIdentifier)
+                    stdout <<< "Starting last used simulator: \(dev.name) (\(typeName), \(runtimeName))".dim
+                } else {
+                    stdout <<< "Starting last used simulator...".dim
+                }
                 try simulatorService.startSimulator(identifier: lastUDID)
                 try displayStartedDeviceInfo(for: lastUDID, service: simulatorService)
             } else {
