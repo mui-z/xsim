@@ -301,6 +301,9 @@ class SimulatorService {
 
         // Verify the device started successfully
         try verifyDeviceStarted(device.udid)
+
+        // Record as the most recently booted device (best-effort)
+        RecentDeviceStore.recordLastBooted(udid: device.udid)
     }
 
     /// Starts a simulator, allowing disambiguation by runtime when specifying by name
@@ -348,6 +351,9 @@ class SimulatorService {
 
         _ = try executeSimctlCommand(arguments: ["boot", selected.udid])
         try verifyDeviceStarted(selected.udid)
+
+        // Record as the most recently booted device (best-effort)
+        RecentDeviceStore.recordLastBooted(udid: selected.udid)
     }
 
     private func versionInts(from identifier: String) -> [Int] {
