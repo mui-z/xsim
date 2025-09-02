@@ -28,7 +28,7 @@ public class XSimCLI {
         // Register all available commands without heavy initialization
         cli.commands = [
             ListCommand(),
-            StartCommand(), // boot
+            BootCommand(), // boot
             StopCommand(), // shutdown
             CreateCommand(),
             DeleteCommand(),

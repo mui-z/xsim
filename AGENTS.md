@@ -2,7 +2,7 @@
 
 ## プロジェクト構成とモジュール
 - ソース: `Sources/XSim`（エントリ）、`Sources/XSimCLI`（アプリ本体）
-  - Commands: CLI サブコマンド（`ListCommand.swift`, `StartCommand.swift` など）
+  - Commands: CLI サブコマンド（`ListCommand.swift`, `BootCommand.swift` など）
   - Services: simctl 連携（`SimulatorService.swift`）
   - Models: ドメイン型とエラー
 - テスト: `Tests/XSimCLITests`（XCTest の統合テスト）

@@ -2,7 +2,7 @@ import Rainbow
 import SwiftCLI
 
 /// Command to boot a simulator device
-class StartCommand: BaseSimCommand, Command {
+class BootCommand: BaseSimCommand, Command {
     var name: String { "boot" }
     var shortDescription: String { "Boot a simulator" }
     let longDescription = """
