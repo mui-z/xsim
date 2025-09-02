@@ -12,7 +12,7 @@ public class XSimCLI {
         // Initialize CLI with basic configuration
         cli = CLI(
             name: "xsim",
-            version: "1.0.0",
+            version: "2.1.1",
             description: "Xcode Simulator management tool – shortcuts for simctl commands",
         )
 
