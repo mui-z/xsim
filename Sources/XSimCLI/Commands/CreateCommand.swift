@@ -235,7 +235,7 @@ class CreateCommand: BaseSimCommand, Command {
 
         stdout <<< ""
         stdout <<< "Next steps:".dim
-        stdout <<< "  • Start the simulator: xsim start \"\(name)\"".dim
+        stdout <<< "  • Boot the simulator: xsim boot \"\(name)\"".dim
         stdout <<< "  • List all simulators: xsim list".dim
     }
 }

@@ -10,7 +10,7 @@
 
 ## ビルド・テスト・実行
 - ビルド: `swift build` — 全ターゲットをビルド。
-- 実行: `swift run xsim list`（例: `swift run xsim start "iPhone 15"`）。
+- 実行: `swift run xsim list`（例: `swift run xsim boot "iPhone 15"`）。
 - テスト: `swift test` — XCTest を実行。Xcode と `xcrun simctl` が必要。
 - 整形: `make format` — SwiftFormat を実行。
 

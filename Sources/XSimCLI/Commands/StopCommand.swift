@@ -1,18 +1,18 @@
 import Rainbow
 import SwiftCLI
 
-/// Command to stop simulator devices
+/// Command to shut down simulator devices
 class StopCommand: BaseSimCommand, Command {
-    let name = "stop"
-    let shortDescription = "Stop simulators"
+    var name: String { "shutdown" }
+    var shortDescription: String { "Shutdown simulators" }
     let longDescription = """
-    Stops the specified simulator device.
-    If no device is specified, stops all running simulators.
+    Shuts down the specified simulator device.
+    If no device is specified, shuts down all running simulators.
 
     Examples:
-      xsim stop                                 # stop all running simulators
-      xsim stop "iPhone 15"                     # stop a specific device
-      xsim stop 12345678-1234-1234-1234-123456789012  # by UUID
+      xsim shutdown                             # shutdown all running simulators
+      xsim shutdown "iPhone 15"                 # shutdown a specific device
+      xsim shutdown 12345678-1234-1234-1234-123456789012  # by UUID
     """
 
     @Param var deviceIdentifier: String?
@@ -38,7 +38,7 @@ class StopCommand: BaseSimCommand, Command {
 
     /// Stops a specific device
     private func stopSpecificDevice(identifier: String) throws {
-        stdout <<< "Stopping simulator...".dim
+        stdout <<< "Shutting down simulator...".dim
 
         // Get device info before stopping
         let simulatorService = try getService()
@@ -65,7 +65,7 @@ class StopCommand: BaseSimCommand, Command {
             return
         }
 
-        stdout <<< "Stopping all running simulators...".dim
+        stdout <<< "Shutting down all running simulators...".dim
 
         // Stop all devices
         try simulatorService.stopSimulator(identifier: nil)
@@ -84,7 +84,7 @@ class StopCommand: BaseSimCommand, Command {
             throw CLI.Error(message: "")
 
         case let .deviceNotRunning(identifier):
-            stdout <<< "ℹ Device '\(identifier)' is already stopped".yellow
+            stdout <<< "ℹ Device '\(identifier)' is already shut down".yellow
 
             // Try to get device info to show current status
             do {
@@ -104,7 +104,7 @@ class StopCommand: BaseSimCommand, Command {
 
     /// Displays success message for stopping a specific device
     private func displayStopSuccess(device: SimulatorDevice) {
-        stdout <<< "✓ Stopped the simulator".green
+        stdout <<< "✓ Shut down the simulator".green
         stdout <<< ""
 
         let deviceTypeName = DisplayFormat.deviceTypeName(from: device.deviceTypeIdentifier)
@@ -119,7 +119,7 @@ class StopCommand: BaseSimCommand, Command {
 
     /// Displays success message for stopping all devices
     private func displayStopAllSuccess(stoppedDevices: [SimulatorDevice]) {
-        stdout <<< "✓ Stopped all simulators".green
+        stdout <<< "✓ Shut down all simulators".green
         stdout <<< ""
 
         stdout <<< "Stopped devices (\(stoppedDevices.count)):".bold
@@ -129,7 +129,7 @@ class StopCommand: BaseSimCommand, Command {
         }
 
         stdout <<< ""
-        stdout <<< "Tip: Use 'xsim start <device>' to boot a simulator again".dim
+        stdout <<< "Tip: Use 'xsim boot <device>' to boot a simulator again".dim
     }
 
     /// Displays current device status

@@ -7,7 +7,7 @@ class DeleteCommand: BaseSimCommand, Command {
     let shortDescription = "Delete a simulator"
     let longDescription = """
     Deletes the specified simulator device.
-    If the simulator is running, it will be stopped before deletion.
+    If the simulator is running, it will be shut down before deletion.
     This action cannot be undone.
 
     You can also delete all simulators for a given OS/runtime version using --runtime.
@@ -166,7 +166,7 @@ class DeleteCommand: BaseSimCommand, Command {
         if device.state.isRunning {
             stdout <<< "  Current state: \(DisplayFormat.coloredState(device.state))"
             stdout <<< ""
-            stdout <<< "Note: Running simulators will be stopped automatically".yellow
+            stdout <<< "Note: Running simulators will be shut down automatically".yellow
         }
 
         stdout <<< ""

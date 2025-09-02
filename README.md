@@ -25,8 +25,8 @@ Xcode Simulator management tool – shortcuts for simctl commands
 Commands:
   run             Run a simulator (default)
   list            List available simulators
-  start           Start a simulator
-  stop            Stop simulators
+  boot            Boot a simulator
+  shutdown        Shutdown simulators
   create          Create a new simulator
   delete          Delete a simulator
   doctor          Check environment and simctl support

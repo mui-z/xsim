@@ -114,7 +114,7 @@ public enum SimulatorError: Error, LocalizedError, Equatable {
         case .deviceAlreadyRunning:
             "The device is already running; no action is needed"
         case .deviceNotRunning:
-            "Start the device with 'xsim start <device>'"
+            "Boot the device with 'xsim boot <device>'"
         case .invalidDeviceType:
             "Run 'xsim create --list-types' to list available device types"
         case .invalidRuntime:

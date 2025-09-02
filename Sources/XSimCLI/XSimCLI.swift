@@ -29,8 +29,8 @@ public class XSimCLI {
         cli.commands = [
             RunCommand(),
             ListCommand(),
-            StartCommand(),
-            StopCommand(),
+            StartCommand(), // boot
+            StopCommand(), // shutdown
             CreateCommand(),
             DeleteCommand(),
             DoctorCommand(),
