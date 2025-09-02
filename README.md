@@ -23,7 +23,6 @@ Usage: xsim <command> [options]
 Xcode Simulator management tool – shortcuts for simctl commands
 
 Commands:
-  run             Run a simulator (default)
   list            List available simulators
   boot            Boot a simulator
   shutdown        Shutdown simulators
@@ -78,12 +77,19 @@ Debug logging:
 # enable verbose debug logs to stderr
 XSIM_VERBOSE=1 xsim list
 ```
-Quick start:
+Boot convenience:
 
 ```sh
-# If no simulators are running, this starts the most recently used
-xsim
+# Boot the most recently used simulator when none are running
+xsim boot
 
-# Same behavior as an explicit command
-xsim run
+# Boot a specific device by name or UUID
+xsim boot "iPhone 15"
+xsim boot 12345678-1234-1234-1234-123456789012
+```
+
+Note:
+
+```text
+Running without a subcommand (just `xsim`) behaves the same as `xsim boot`.
 ```

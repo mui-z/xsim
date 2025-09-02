@@ -2,7 +2,7 @@ import Rainbow
 import SwiftCLI
 
 /// Command to shut down simulator devices
-class StopCommand: BaseSimCommand, Command {
+class ShutdownCommand: BaseSimCommand, Command {
     var name: String { "shutdown" }
     var shortDescription: String { "Shutdown simulators" }
     let longDescription = """
