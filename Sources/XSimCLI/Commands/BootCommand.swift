@@ -17,7 +17,7 @@ class BootCommand: BaseSimCommand, Command {
       xsim boot "iPhone 16" --runtime "iOS 26"   # disambiguate by runtime
     """
 
-    @Param var deviceIdentifier: String?
+    @OptionalParam var deviceIdentifier: String?
 
     @Key("--runtime", description: "Filter by runtime when selecting by name (e.g. 'iOS 17', '17.0' or a runtime identifier)")
     var runtimeFilter: String?
