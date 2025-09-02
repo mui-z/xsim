@@ -87,3 +87,9 @@ xsim boot
 xsim boot "iPhone 15"
 xsim boot 12345678-1234-1234-1234-123456789012
 ```
+
+Note:
+
+```text
+Running without a subcommand (just `xsim`) behaves the same as `xsim boot`.
+```
