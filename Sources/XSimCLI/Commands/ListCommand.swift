@@ -90,7 +90,7 @@ class ListCommand: BaseSimCommand, Command {
     private func displayNoDevicesMessage() {
         if showRunningOnly {
             stdout <<< "No simulators are running.".yellow
-            stdout <<< "To start a simulator: xsim start <device>".dim
+            stdout <<< "To boot a simulator: xsim boot <device>".dim
         } else if showAvailableOnly {
             stdout <<< "No available simulators.".yellow
             stdout <<< "To create a simulator: xsim create <name> <type> <runtime>".dim
@@ -260,7 +260,7 @@ class ListCommand: BaseSimCommand, Command {
 
         if runningCount == 0, !showRunningOnly {
             stdout <<< ""
-            stdout <<< "Tip: Use 'xsim start <device>' to boot a simulator".dim
+            stdout <<< "Tip: Use 'xsim boot <device>' to boot a simulator".dim
         }
     }
 

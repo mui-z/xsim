@@ -1,18 +1,18 @@
 import Rainbow
 import SwiftCLI
 
-/// Command to start a simulator device
+/// Command to boot a simulator device
 class StartCommand: BaseSimCommand, Command {
-    let name = "start"
-    let shortDescription = "Start a simulator"
+    var name: String { "boot" }
+    var shortDescription: String { "Boot a simulator" }
     let longDescription = """
-    Starts the specified simulator device.
+    Boots the specified simulator device.
     You can specify the device by name or UUID.
 
     Examples:
-      xsim start "iPhone 16"                    # by name
-      xsim start 12345678-1234-1234-1234-123456789012  # by UUID
-      xsim start "iPhone 16" --runtime "iOS 26"   # disambiguate by runtime
+      xsim boot "iPhone 16"                    # by name
+      xsim boot 12345678-1234-1234-1234-123456789012  # by UUID
+      xsim boot "iPhone 16" --runtime "iOS 26"   # disambiguate by runtime
     """
 
     @Param var deviceIdentifier: String
@@ -24,7 +24,7 @@ class StartCommand: BaseSimCommand, Command {
 
     func execute() throws {
         do {
-            stdout <<< "Starting simulator...".dim
+            stdout <<< "Booting simulator...".dim
 
             // Start the simulator
             let simulatorService = try getService()
@@ -35,7 +35,7 @@ class StartCommand: BaseSimCommand, Command {
             if let device = findDevice(in: devices, identifier: deviceIdentifier) {
                 displayStartSuccess(device: device)
             } else {
-                stdout <<< "✓ Started simulator '\(deviceIdentifier)'".green
+                stdout <<< "✓ Booted simulator '\(deviceIdentifier)'".green
             }
 
         } catch let error as SimulatorError {
@@ -83,7 +83,7 @@ class StartCommand: BaseSimCommand, Command {
 
     /// Displays success message with device information
     private func displayStartSuccess(device: SimulatorDevice) {
-        stdout <<< "✓ Simulator started".green
+        stdout <<< "✓ Simulator booted".green
         stdout <<< ""
 
         let deviceTypeName = DisplayFormat.deviceTypeName(from: device.deviceTypeIdentifier)
