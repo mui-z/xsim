@@ -280,6 +280,49 @@ class SimulatorService {
         return devices
     }
 
+    /// Returns the list of user-installed applications for a given simulator.
+    /// - Parameter device: Simulator device whose apps should be inspected.
+    /// - Returns: Array of SimulatorApp filtered to exclude default/system apps.
+    func listInstalledUserApps(for device: SimulatorDevice) throws -> [SimulatorApp] {
+        return try listInstalledApps(forUDID: device.udid, includeSystemApps: false)
+    }
+
+    /// Returns the list of installed applications for a simulator UUID.
+    /// - Parameters:
+    ///   - udid: Simulator identifier
+    ///   - includeSystemApps: Include system apps when true (defaults to true for internal callers)
+    private func listInstalledApps(forUDID udid: String, includeSystemApps: Bool) throws -> [SimulatorApp] {
+        let data = try executeSimctlCommand(arguments: ["listapps", udid], requiresJSON: true, timeoutSeconds: 15)
+        let response = try parseJSONOutput(data, as: [String: SimctlAppData].self)
+
+        var apps: [SimulatorApp] = []
+
+        for (bundleID, appData) in response {
+            let resolvedBundleID = appData.bundleIdentifier.trimmedNonEmpty ?? bundleID
+            guard !resolvedBundleID.isEmpty else { continue }
+
+            let type = SimulatorApp.ApplicationType(rawValue: appData.applicationType)
+            if !includeSystemApps, !type.isUserApp {
+                continue
+            }
+
+            let displayName = appData.displayName.trimmedNonEmpty ?? appData.bundleName.trimmedNonEmpty
+            let version = appData.shortVersion.trimmedNonEmpty ?? appData.version.trimmedNonEmpty
+
+            let app = SimulatorApp(
+                bundleIdentifier: resolvedBundleID,
+                name: displayName,
+                version: version,
+                applicationType: type
+            )
+            apps.append(app)
+        }
+
+        return apps.sorted { lhs, rhs in
+            lhs.displayName.localizedCaseInsensitiveCompare(rhs.displayName) == .orderedAscending
+        }
+    }
+
     /// Starts a simulator device
     /// - Parameter identifier: The device name or UUID to start
     /// - Throws: SimulatorError if the operation fails
@@ -916,6 +959,25 @@ class SimulatorService {
 
 // MARK: - Supporting Types for JSON Parsing
 
+private struct SimctlAppData: Decodable {
+    let bundleIdentifier: String?
+    let displayName: String?
+    let bundleName: String?
+    let applicationType: String?
+    let shortVersion: String?
+    let version: String?
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: AnyCodingKey.self)
+        bundleIdentifier = container.decodeString(for: ["CFBundleIdentifier", "bundleIdentifier"])
+        displayName = container.decodeString(for: ["CFBundleDisplayName", "displayName"])
+        bundleName = container.decodeString(for: ["CFBundleName", "bundleName"])
+        applicationType = container.decodeString(for: ["ApplicationType", "applicationType"])
+        shortVersion = container.decodeString(for: ["CFBundleShortVersionString", "shortVersion"])
+        version = container.decodeString(for: ["CFBundleVersion", "version"])
+    }
+}
+
 private struct SimctlDeviceListResponse: Codable {
     let devices: [String: [SimctlDeviceData]]
 }
@@ -946,4 +1008,43 @@ private struct SimctlRuntimeData: Codable {
     let name: String
     let version: String
     let isAvailable: Bool?
+}
+
+private struct AnyCodingKey: CodingKey {
+    let stringValue: String
+    let intValue: Int?
+
+    init?(stringValue: String) {
+        self.stringValue = stringValue
+        self.intValue = nil
+    }
+
+    init?(intValue: Int) {
+        self.stringValue = "\(intValue)"
+        self.intValue = intValue
+    }
+
+    init(_ string: String) {
+        self.stringValue = string
+        self.intValue = nil
+    }
+}
+
+private extension KeyedDecodingContainer where Key == AnyCodingKey {
+    func decodeString(for keys: [String]) -> String? {
+        for key in keys {
+            guard let codingKey = AnyCodingKey(stringValue: key) else { continue }
+            if let value = try decodeIfPresent(String.self, forKey: codingKey) {
+                return value
+            }
+        }
+        return nil
+    }
+}
+
+private extension Optional where Wrapped == String {
+    var trimmedNonEmpty: String? {
+        guard let value = self?.trimmingCharacters(in: .whitespacesAndNewlines), !value.isEmpty else { return nil }
+        return value
+    }
 }

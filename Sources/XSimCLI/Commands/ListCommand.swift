@@ -13,6 +13,7 @@ class ListCommand: BaseSimCommand, Command {
       xsim list                    # show all devices
       xsim list --running          # only running devices
       xsim list --available        # only available devices
+      xsim list --apps             # include installed user apps per device
     """
 
     @Flag("-r", "--running", description: "Show only running simulators")
@@ -30,7 +31,15 @@ class ListCommand: BaseSimCommand, Command {
     @Flag("--truncate", description: "Truncate and align columns (legacy compact view)")
     var truncate: Bool
 
+    @Flag("--apps", description: "Include installed user apps for each simulator")
+    var includeInstalledApps: Bool
+
     override init() {}
+
+    private struct DeviceAppsInfo {
+        let apps: [SimulatorApp]
+        let errorMessage: String?
+    }
 
     func execute() throws {
         do {
@@ -62,7 +71,12 @@ class ListCommand: BaseSimCommand, Command {
                 return
             }
 
-            displayDevices(filteredDevices)
+            var appsInfo: [String: DeviceAppsInfo] = [:]
+            if includeInstalledApps {
+                appsInfo = gatherInstalledApps(for: filteredDevices, using: simulatorService)
+            }
+
+            displayDevices(filteredDevices, appsInfo: appsInfo)
 
         } catch let error as SimulatorError {
             throw CLI.Error(message: error.localizedDescription)
@@ -101,7 +115,7 @@ class ListCommand: BaseSimCommand, Command {
     }
 
     /// Displays devices in a formatted table
-    private func displayDevices(_ devices: [SimulatorDevice]) {
+    private func displayDevices(_ devices: [SimulatorDevice], appsInfo: [String: DeviceAppsInfo]) {
         // Group devices by runtime for better organization
         let groupedDevices = Dictionary(grouping: devices) { device in
             DisplayFormat.runtimeName(from: device.runtimeIdentifier)
@@ -125,7 +139,8 @@ class ListCommand: BaseSimCommand, Command {
             // Display devices for this runtime
             let sortedDevices = devicesForRuntime.sorted { $0.name < $1.name }
             for device in sortedDevices {
-                displayDeviceRow(device, nameWidth: nameW, stateWidth: stateW, typeWidth: typeW)
+                let info = appsInfo[device.udid]
+                displayDeviceRow(device, nameWidth: nameW, stateWidth: stateW, typeWidth: typeW, appsInfo: info)
             }
         }
 
@@ -203,7 +218,13 @@ class ListCommand: BaseSimCommand, Command {
     }
 
     /// Displays a single device row
-    private func displayDeviceRow(_ device: SimulatorDevice, nameWidth: Int, stateWidth: Int, typeWidth: Int) {
+    private func displayDeviceRow(
+        _ device: SimulatorDevice,
+        nameWidth: Int,
+        stateWidth: Int,
+        typeWidth: Int,
+        appsInfo: DeviceAppsInfo?
+    ) {
         let resolvedTypeName = DisplayFormat.deviceTypeName(from: device.deviceTypeIdentifier)
 
         if truncate {
@@ -224,6 +245,28 @@ class ListCommand: BaseSimCommand, Command {
             let typeCol = DisplayFormat.pad(resolvedTypeName, to: typeWidth)
 
             stdout <<< "\(nameCol) \(stateCol) \(typeCol) \(device.udid.dim)"
+        }
+
+        guard let appsInfo else { return }
+
+        let indent = "    "
+        if let error = appsInfo.errorMessage, !error.isEmpty {
+            stdout <<< "\(indent)⚠️  Failed to load apps: \(error)".yellow
+            return
+        }
+
+        if appsInfo.apps.isEmpty {
+            stdout <<< "\(indent)(No user apps installed)".dim
+            return
+        }
+
+        for app in appsInfo.apps {
+            var line = "\(indent)- \(app.displayName)"
+            if let version = app.version {
+                line += " (\(version))"
+            }
+            line += " — \(app.bundleIdentifier)"
+            stdout <<< line.dim
         }
     }
 
@@ -262,6 +305,23 @@ class ListCommand: BaseSimCommand, Command {
             stdout <<< ""
             stdout <<< "Tip: Use 'xsim boot <device>' to boot a simulator".dim
         }
+    }
+
+    private func gatherInstalledApps(for devices: [SimulatorDevice], using service: SimulatorService) -> [String: DeviceAppsInfo] {
+        var result: [String: DeviceAppsInfo] = [:]
+
+        for device in devices {
+            do {
+                let apps = try service.listInstalledUserApps(for: device)
+                result[device.udid] = DeviceAppsInfo(apps: apps, errorMessage: nil)
+            } catch let error as SimulatorError {
+                result[device.udid] = DeviceAppsInfo(apps: [], errorMessage: error.localizedDescription)
+            } catch {
+                result[device.udid] = DeviceAppsInfo(apps: [], errorMessage: error.localizedDescription)
+            }
+        }
+
+        return result
     }
 
     // Identifier and column helpers moved to DisplayFormat
