@@ -70,6 +70,13 @@ xsim list
 xsim list --truncate
 ```
 
+List installed apps:
+
+```sh
+# include non-default (user-installed) apps in the listing output
+xsim list --apps
+```
+
 
 Debug logging:
 
